@@ -133,7 +133,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ sender: { name: 'RepairFlow', email: 'noreply@repairflow.fr' }, to: [{ email: $env.SHOP_EMAIL, name: 'Équipe RepairFlow' }], subject: $json.email_subject, htmlContent: $json.email_html }) }}",
+        "jsonBody": "={{ JSON.stringify({ sender: { name: 'RepairFlow', email: 'ahamada.yahya@gmail.com' }, to: [{ email: $env.SHOP_EMAIL, name: 'Équipe RepairFlow' }], subject: $json.email_subject, htmlContent: $json.email_html }) }}",
         "options": {
           "response": { "response": { "responseFormat": "json" } }
         }

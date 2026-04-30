@@ -222,7 +222,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ sender: { name: 'RepairFlow', email: 'noreply@repairflow.fr' }, to: [{ email: $json.contact_email, name: $json.contact_name }], subject: 'Votre réparation a bien été enregistrée', htmlContent: '<p>Bonjour ' + $json.contact_name + ',</p><p>Votre <strong>' + ($json.device_brand || '') + ' ' + ($json.device_model || '') + '</strong> a bien été reçu dans notre atelier.</p><p>Suivez l\\'avancement de votre réparation en temps réel ici :</p><p><a href=\\'' + $json.tracking_url + '\\'>' + $json.tracking_url + '</a></p><p>L\\'équipe RepairFlow</p>' }) }}",
+        "jsonBody": "={{ JSON.stringify({ sender: { name: 'RepairFlow', email: 'ahamada.yahya@gmail.com' }, to: [{ email: $json.contact_email, name: $json.contact_name }], subject: 'Votre réparation a bien été enregistrée', htmlContent: '<p>Bonjour ' + $json.contact_name + ',</p><p>Votre <strong>' + ($json.device_brand || '') + ' ' + ($json.device_model || '') + '</strong> a bien été reçu dans notre atelier.</p><p>Suivez l\\'avancement de votre réparation en temps réel ici :</p><p><a href=\\'' + $json.tracking_url + '\\'>' + $json.tracking_url + '</a></p><p>L\\'équipe RepairFlow</p>' }) }}",
         "options": {
           "response": {
             "response": {

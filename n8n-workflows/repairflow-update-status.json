@@ -325,7 +325,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ sender: { name: 'RepairFlow', email: 'noreply@repairflow.fr' }, to: [{ email: $('Build Notification Content').first().json.contact_email, name: $('Build Notification Content').first().json.contact_name }], subject: $('Build Notification Content').first().json.email_subject, htmlContent: $('Build Notification Content').first().json.email_html }) }}",
+        "jsonBody": "={{ JSON.stringify({ sender: { name: 'RepairFlow', email: 'ahamada.yahya@gmail.com' }, to: [{ email: $('Build Notification Content').first().json.contact_email, name: $('Build Notification Content').first().json.contact_name }], subject: $('Build Notification Content').first().json.email_subject, htmlContent: $('Build Notification Content').first().json.email_html }) }}",
         "options": {
           "response": { "response": { "responseFormat": "json" } }
         }
