@@ -188,18 +188,17 @@ export default function BienvenueePage() {
     setSaving(true)
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-
       // Découpe le nom saisi en prénom / nom de famille
       const nameParts = form3.clientName.trim().split(' ')
       const firstName = nameParts[0] ?? ''
       const lastName  = nameParts.slice(1).join(' ') || null
 
-      // Crée le client
+      // Crée le client (full_name conservé pour compatibilité avec le reste de l'app)
       const { data: client } = await supabase
         .from('clients')
         .insert({
           shop_id:    shopId,
+          full_name:  form3.clientName.trim(),
           first_name: firstName,
           last_name:  lastName,
           phone:      form3.clientPhone.trim() || null,
@@ -232,6 +231,7 @@ export default function BienvenueePage() {
       // Passage automatique à l'étape 4 après 2 secondes
       setTimeout(() => { setSaving(false); setStep(4) }, 2000)
     } catch {
+      // En cas d'erreur, on passe quand même à l'étape suivante sans bloquer l'onboarding
       setSaving(false)
       setStep(4)
     }
@@ -240,14 +240,19 @@ export default function BienvenueePage() {
   // ── Étape 4 : sélection du plan et finalisation ──
   async function handleFinish(planId = null) {
     setSaving(true)
-    const updates = {
-      onboarding_completed:    true,
-      onboarding_completed_at: new Date().toISOString(),
-      onboarding_step:         4,
+    try {
+      const updates = {
+        onboarding_completed:    true,
+        onboarding_completed_at: new Date().toISOString(),
+        onboarding_step:         4,
+      }
+      if (planId) updates.plan = planId
+      await supabase.from('shops').update(updates).eq('id', shopId)
+      router.replace('/admin')
+    } catch {
+      // En cas d'erreur réseau, on débloque le bouton
+      setSaving(false)
     }
-    if (planId) updates.plan = planId
-    await supabase.from('shops').update(updates).eq('id', shopId)
-    router.replace('/admin')
   }
 
   // ── Progression ──
