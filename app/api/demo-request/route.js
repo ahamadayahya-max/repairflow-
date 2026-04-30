@@ -1,14 +1,17 @@
 import { NextResponse } from 'next/server'
+import { sendEmail } from '@/lib/notifications/sendEmail'
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
-const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY
+const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL
+const SERVICE_KEY   = process.env.SUPABASE_SERVICE_ROLE_KEY
+// Email de l'administrateur qui reçoit les demandes de démo
+const ADMIN_EMAIL   = process.env.ADMIN_NOTIFICATION_EMAIL ?? 'ahamada.yahya@gmail.com'
 
 /**
  * POST /api/demo-request
- * Enregistre une demande de démo dans Supabase (table demo_requests).
- * Pas de dépendance à Brevo — fonctionne immédiatement en production.
+ * Enregistre une demande de démo dans Supabase et envoie un email de notification
+ * à l'administrateur RepairFlow.
  */
 export async function POST(request) {
   try {
@@ -55,6 +58,27 @@ export async function POST(request) {
         { status: 500 }
       )
     }
+
+    // Notification email à l'administrateur — non bloquant
+    sendEmail({
+      to:      ADMIN_EMAIL,
+      subject: `🔔 Nouvelle demande de démo — ${nom_atelier}`,
+      html: `
+        <div style="font-family:sans-serif;max-width:520px;margin:auto;">
+          <h2 style="color:#F59E0B;">Nouvelle demande de démo RepairFlow</h2>
+          <table style="width:100%;border-collapse:collapse;">
+            <tr><td style="padding:8px 0;color:#6B7280;width:140px;">Prénom</td><td style="padding:8px 0;font-weight:600;">${prenom}</td></tr>
+            <tr><td style="padding:8px 0;color:#6B7280;">Atelier</td><td style="padding:8px 0;font-weight:600;">${nom_atelier}</td></tr>
+            <tr><td style="padding:8px 0;color:#6B7280;">Email</td><td style="padding:8px 0;"><a href="mailto:${email}">${email}</a></td></tr>
+            <tr><td style="padding:8px 0;color:#6B7280;">Téléphone</td><td style="padding:8px 0;"><a href="tel:${telephone}">${telephone}</a></td></tr>
+            ${message ? `<tr><td style="padding:8px 0;color:#6B7280;vertical-align:top;">Message</td><td style="padding:8px 0;">${message}</td></tr>` : ''}
+          </table>
+          <p style="margin-top:24px;color:#9CA3AF;font-size:13px;">
+            Demande reçue via repairflow-app.vercel.app — à rappeler sous 24h.
+          </p>
+        </div>
+      `,
+    }).catch(err => console.error('[demo-request] Erreur envoi email admin:', err.message))
 
     return NextResponse.json({ success: true, message: 'Demande envoyée avec succès.' })
   } catch (err) {
