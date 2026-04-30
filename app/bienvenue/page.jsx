@@ -1,0 +1,598 @@
+'use client'
+
+export const dynamic = 'force-dynamic'
+
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { getSupabaseClient } from '@/lib/supabase/client'
+import {
+  Wrench, CheckCircle2, ArrowRight, Loader2, Store,
+  Phone, MapPin, Clock, Mail, FileText, Zap,
+} from 'lucide-react'
+
+// ---------------------------------------------------------------------------
+// Données des plans
+// ---------------------------------------------------------------------------
+
+const PLANS = [
+  {
+    id:       'starter',
+    name:     'Starter',
+    price:    '29',
+    popular:  false,
+    features: [
+      '50 tickets / mois',
+      '1 technicien',
+      'Factures PDF',
+      '100 SMS / mois',
+      'Support email',
+    ],
+    cta: 'Choisir Starter',
+  },
+  {
+    id:       'pro',
+    name:     'Pro',
+    price:    '59',
+    popular:  true,
+    features: [
+      'Tickets illimités',
+      '3 techniciens',
+      'Factures PDF',
+      'SMS illimités',
+      'Stock & Pièces',
+      'Agenda',
+      'QualiRépar',
+    ],
+    cta: 'Choisir Pro',
+  },
+  {
+    id:       'enterprise',
+    name:     'Enterprise',
+    price:    '99',
+    popular:  false,
+    features: [
+      'Tout inclus',
+      'Techniciens illimités',
+      'Export comptable FEC',
+      'Accès API',
+      'Support prioritaire',
+    ],
+    cta: 'Nous contacter',
+  },
+]
+
+const inputClass = `w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white
+  placeholder-gray-600 focus:outline-none focus:border-amber-500/40 transition-colors`
+
+const labelClass = 'block text-xs font-medium text-gray-400 mb-1.5'
+
+// ---------------------------------------------------------------------------
+// Page d'onboarding en 4 étapes
+// ---------------------------------------------------------------------------
+
+/**
+ * Page d'onboarding post-inscription. Guidée en 4 étapes.
+ * Redirige vers /admin si onboarding déjà complété.
+ */
+export default function BienvenueePage() {
+  const router   = useRouter()
+  const supabase = getSupabaseClient()
+
+  const [step,      setStep]      = useState(1)   // 1 → 4
+  const [shopId,    setShopId]    = useState(null)
+  const [userName,  setUserName]  = useState('')
+  const [shopName,  setShopName]  = useState('')
+  const [trialDays, setTrialDays] = useState(14)
+  const [loading,   setLoading]   = useState(true)
+  const [saving,    setSaving]    = useState(false)
+  const [ticketCreated, setTicketCreated] = useState(false)
+
+  // Formulaire étape 2 — infos atelier
+  const [form2, setForm2] = useState({
+    name: '', phone: '', email: '', address: '', hours: '', siret: '',
+  })
+
+  // Formulaire étape 3 — premier ticket
+  const [form3, setForm3] = useState({
+    clientName: '', clientPhone: '', brand: '', model: '', issue: '',
+  })
+
+  // Plan sélectionné (étape 4)
+  const [selectedPlan, setSelectedPlan] = useState(null)
+
+  // ── Chargement initial ──
+  useEffect(() => {
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.replace('/login'); return }
+
+      const { data: shop } = await supabase
+        .from('shops')
+        .select('id, name, phone, email, address, hours, siret, onboarding_completed, onboarding_step, trial_ends_at')
+        .eq('owner_id', user.id)
+        .maybeSingle()
+
+      // Déjà complété → dashboard
+      if (shop?.onboarding_completed) {
+        router.replace('/admin')
+        return
+      }
+
+      if (shop) {
+        setShopId(shop.id)
+        setShopName(shop.name ?? '')
+        setForm2({
+          name:    shop.name    ?? '',
+          phone:   shop.phone   ?? '',
+          email:   shop.email   ?? '',
+          address: shop.address ?? '',
+          hours:   shop.hours   ?? '',
+          siret:   shop.siret   ?? '',
+        })
+
+        // Calcule les jours restants d'essai
+        if (shop.trial_ends_at) {
+          const days = Math.max(0, Math.ceil(
+            (new Date(shop.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+          ))
+          setTrialDays(days)
+        }
+
+        // Reprend à l'étape sauvegardée
+        if (shop.onboarding_step >= 2) setStep(shop.onboarding_step)
+      }
+
+      // Prénom depuis les métadonnées Auth
+      setUserName(user.user_metadata?.shop_name ?? user.email?.split('@')[0] ?? '')
+      setLoading(false)
+    }
+    init()
+  }, [])
+
+  // ── Sauvegarde de l'étape courante ──
+  async function saveStep(nextStep, extra = {}) {
+    if (!shopId) return
+    await supabase
+      .from('shops')
+      .update({ onboarding_step: nextStep, ...extra })
+      .eq('id', shopId)
+    setStep(nextStep)
+  }
+
+  // ── Étape 2 : sauvegarde infos atelier ──
+  async function handleStep2(e) {
+    e.preventDefault()
+    if (!form2.name.trim()) return
+    setSaving(true)
+    await supabase
+      .from('shops')
+      .update({
+        name:    form2.name.trim(),
+        phone:   form2.phone.trim()   || null,
+        email:   form2.email.trim()   || null,
+        address: form2.address.trim() || null,
+        hours:   form2.hours.trim()   || null,
+        siret:   form2.siret.trim()   || null,
+        onboarding_step: 3,
+      })
+      .eq('id', shopId)
+    setShopName(form2.name.trim())
+    setSaving(false)
+    setStep(3)
+  }
+
+  // ── Étape 3 : création du premier ticket ──
+  async function handleStep3(e) {
+    e.preventDefault()
+    if (!form3.clientName.trim() || !form3.issue.trim()) return
+    setSaving(true)
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+
+      // Découpe le nom saisi en prénom / nom de famille
+      const nameParts = form3.clientName.trim().split(' ')
+      const firstName = nameParts[0] ?? ''
+      const lastName  = nameParts.slice(1).join(' ') || null
+
+      // Crée le client
+      const { data: client } = await supabase
+        .from('clients')
+        .insert({
+          shop_id:    shopId,
+          first_name: firstName,
+          last_name:  lastName,
+          phone:      form3.clientPhone.trim() || null,
+        })
+        .select('id')
+        .single()
+
+      if (client) {
+        // Crée le ticket de démonstration
+        await supabase.from('tickets').insert({
+          shop_id:        shopId,
+          client_id:      client.id,
+          tracking_token: crypto.randomUUID().replace(/-/g, ''),
+          status:         'pending',
+          device_brand:   form3.brand.trim() || null,
+          device_model:   form3.model.trim() || null,
+          device_type:    'smartphone',
+          issue_desc:     form3.issue.trim(),
+          received_at:    new Date().toISOString(),
+          intake_channel: 'manual',
+        })
+      }
+
+      setTicketCreated(true)
+      await supabase
+        .from('shops')
+        .update({ onboarding_step: 4 })
+        .eq('id', shopId)
+
+      // Passage automatique à l'étape 4 après 2 secondes
+      setTimeout(() => { setSaving(false); setStep(4) }, 2000)
+    } catch {
+      setSaving(false)
+      setStep(4)
+    }
+  }
+
+  // ── Étape 4 : sélection du plan et finalisation ──
+  async function handleFinish(planId = null) {
+    setSaving(true)
+    const updates = {
+      onboarding_completed:    true,
+      onboarding_completed_at: new Date().toISOString(),
+      onboarding_step:         4,
+    }
+    if (planId) updates.plan = planId
+    await supabase.from('shops').update(updates).eq('id', shopId)
+    router.replace('/admin')
+  }
+
+  // ── Progression ──
+  function ProgressBar() {
+    return (
+      <div className="flex items-center gap-1.5 mb-8">
+        {[1,2,3,4].map(i => (
+          <div key={i} className="flex items-center gap-1.5">
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all
+              ${i < step  ? 'bg-green-500 text-white'
+              : i === step ? 'bg-amber-500 text-white'
+                           : 'bg-white/10 text-gray-500'}`}>
+              {i < step ? '✓' : i}
+            </div>
+            {i < 4 && (
+              <div className={`w-8 h-0.5 rounded-full transition-colors
+                ${i < step ? 'bg-green-500' : 'bg-white/10'}`} />
+            )}
+          </div>
+        ))}
+        <span className="ml-2 text-xs text-gray-500">Étape {step} / 4</span>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0F0F1A] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-[#0F0F1A] flex items-center justify-center px-4 py-10">
+      <div className="w-full max-w-lg">
+
+        {/* Logo */}
+        <div className="flex items-center justify-center gap-2 mb-8">
+          <div className="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center">
+            <Wrench className="w-4 h-4 text-amber-400" />
+          </div>
+          <span className="text-white font-bold text-lg">RepairFlow</span>
+        </div>
+
+        <div className="bg-[#111118] rounded-2xl border border-white/10 p-6 lg:p-8">
+
+          {/* Barre de progression */}
+          <ProgressBar />
+
+          {/* ─────────────────────────────────────────
+              ÉTAPE 1 — Bienvenue
+          ───────────────────────────────────────── */}
+          {step === 1 && (
+            <div className="text-center">
+              <div className="text-5xl mb-4">🔧</div>
+              <h1 className="text-white font-bold text-2xl mb-2">
+                Bienvenue sur RepairFlow !
+              </h1>
+              <p className="text-gray-400 text-sm mb-1">
+                Votre atelier <strong className="text-white">{shopName}</strong> est prêt.
+              </p>
+              <p className="text-gray-500 text-sm mb-6">
+                Nous allons configurer l'essentiel en 4 étapes rapides.
+              </p>
+
+              {/* Bandeau essai */}
+              <div className="flex items-center justify-center gap-2 px-4 py-3 bg-amber-500/10
+                              border border-amber-500/20 rounded-xl mb-8 text-sm">
+                <span className="text-lg">🎁</span>
+                <span className="text-amber-300 font-medium">
+                  Essai gratuit — {trialDays} jours restants · Aucune CB requise
+                </span>
+              </div>
+
+              <button
+                onClick={() => saveStep(2)}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-amber-500
+                           hover:bg-amber-400 text-white font-semibold rounded-xl transition-colors"
+              >
+                Commencer la configuration
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* ─────────────────────────────────────────
+              ÉTAPE 2 — Infos atelier
+          ───────────────────────────────────────── */}
+          {step === 2 && (
+            <div>
+              <h2 className="text-white font-bold text-xl mb-1">Parlez-nous de votre atelier</h2>
+              <p className="text-gray-500 text-sm mb-6">
+                Ces infos apparaîtront sur vos factures et SMS clients.
+              </p>
+
+              <form onSubmit={handleStep2} className="space-y-4">
+
+                <div>
+                  <label className={labelClass}>
+                    <span className="flex items-center gap-1.5"><Store className="w-3 h-3" /> Nom de l'atelier *</span>
+                  </label>
+                  <input type="text" required value={form2.name}
+                    onChange={e => setForm2(f => ({ ...f, name: e.target.value }))}
+                    placeholder="L'Atelier du Mobile" className={inputClass} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelClass}>
+                      <span className="flex items-center gap-1.5"><Phone className="w-3 h-3" /> Téléphone *</span>
+                    </label>
+                    <input type="tel" required value={form2.phone}
+                      onChange={e => setForm2(f => ({ ...f, phone: e.target.value }))}
+                      placeholder="06 12 34 56 78" className={inputClass} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>
+                      <span className="flex items-center gap-1.5"><Mail className="w-3 h-3" /> Email pro</span>
+                    </label>
+                    <input type="email" value={form2.email}
+                      onChange={e => setForm2(f => ({ ...f, email: e.target.value }))}
+                      placeholder="contact@atelier.fr" className={inputClass} />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={labelClass}>
+                    <span className="flex items-center gap-1.5"><MapPin className="w-3 h-3" /> Adresse</span>
+                  </label>
+                  <input type="text" value={form2.address}
+                    onChange={e => setForm2(f => ({ ...f, address: e.target.value }))}
+                    placeholder="221 route de Seysses, 31100 Toulouse" className={inputClass} />
+                </div>
+
+                <div>
+                  <label className={labelClass}>
+                    <span className="flex items-center gap-1.5"><Clock className="w-3 h-3" /> Horaires d'ouverture</span>
+                  </label>
+                  <input type="text" value={form2.hours}
+                    onChange={e => setForm2(f => ({ ...f, hours: e.target.value }))}
+                    placeholder="Lun-Sam 9h-19h, fermé dimanche" className={inputClass} />
+                </div>
+
+                <div>
+                  <label className={labelClass}>
+                    <span className="flex items-center gap-1.5"><FileText className="w-3 h-3" /> SIRET <span className="text-gray-600 font-normal">(optionnel, pour les factures)</span></span>
+                  </label>
+                  <input type="text" value={form2.siret}
+                    onChange={e => setForm2(f => ({ ...f, siret: e.target.value }))}
+                    placeholder="123 456 789 00012" className={inputClass} />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setStep(1)}
+                    className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10
+                               text-gray-300 text-sm font-medium rounded-xl transition-colors">
+                    Passer
+                  </button>
+                  <button type="submit" disabled={saving || !form2.name.trim()}
+                    className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50
+                               text-white font-semibold text-sm rounded-xl transition-colors
+                               flex items-center justify-center gap-2">
+                    {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {saving ? 'Enregistrement…' : 'Enregistrer et continuer →'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* ─────────────────────────────────────────
+              ÉTAPE 3 — Premier ticket
+          ───────────────────────────────────────── */}
+          {step === 3 && (
+            <div>
+              {ticketCreated ? (
+                /* Animation de succès */
+                <div className="text-center py-6">
+                  <div className="w-14 h-14 bg-green-400/10 rounded-full flex items-center
+                                  justify-center mx-auto mb-4">
+                    <CheckCircle2 className="w-8 h-8 text-green-400" />
+                  </div>
+                  <h2 className="text-white font-bold text-xl mb-2">Ticket créé !</h2>
+                  <p className="text-gray-400 text-sm">
+                    Votre client recevra un SMS de confirmation.
+                  </p>
+                  <div className="mt-4">
+                    <Loader2 className="w-5 h-5 text-amber-400 animate-spin mx-auto" />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <h2 className="text-white font-bold text-xl mb-1">Créez votre premier ticket</h2>
+                  <p className="text-gray-500 text-sm mb-6">
+                    Voyez comment ça fonctionne en 30 secondes.
+                  </p>
+
+                  <form onSubmit={handleStep3} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={labelClass}>Nom du client *</label>
+                        <input type="text" required value={form3.clientName}
+                          onChange={e => setForm3(f => ({ ...f, clientName: e.target.value }))}
+                          placeholder="Martin Dupont" className={inputClass} />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Téléphone</label>
+                        <input type="tel" value={form3.clientPhone}
+                          onChange={e => setForm3(f => ({ ...f, clientPhone: e.target.value }))}
+                          placeholder="06 12 34 56 78" className={inputClass} />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={labelClass}>Marque</label>
+                        <input type="text" value={form3.brand}
+                          onChange={e => setForm3(f => ({ ...f, brand: e.target.value }))}
+                          placeholder="Apple, Samsung…" className={inputClass} />
+                      </div>
+                      <div>
+                        <label className={labelClass}>Modèle</label>
+                        <input type="text" value={form3.model}
+                          onChange={e => setForm3(f => ({ ...f, model: e.target.value }))}
+                          placeholder="iPhone 15, S24…" className={inputClass} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className={labelClass}>Description de la panne *</label>
+                      <textarea required rows={2} value={form3.issue}
+                        onChange={e => setForm3(f => ({ ...f, issue: e.target.value }))}
+                        placeholder="Ex : Écran cassé, ne s'allume plus…"
+                        className={`${inputClass} resize-none`} />
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                      <button type="button" onClick={() => saveStep(4)}
+                        className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10
+                                   text-gray-300 text-sm font-medium rounded-xl transition-colors">
+                        Passer
+                      </button>
+                      <button type="submit" disabled={saving}
+                        className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50
+                                   text-white font-semibold text-sm rounded-xl transition-colors
+                                   flex items-center justify-center gap-2">
+                        {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                        {saving ? 'Création…' : 'Créer mon premier ticket →'}
+                      </button>
+                    </div>
+                  </form>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ─────────────────────────────────────────
+              ÉTAPE 4 — Choix du plan
+          ───────────────────────────────────────── */}
+          {step === 4 && (
+            <div>
+              <h2 className="text-white font-bold text-xl mb-1 text-center">Choisissez votre formule</h2>
+              <p className="text-gray-500 text-sm mb-6 text-center">
+                Continuez gratuitement pendant {trialDays} jours, puis choisissez la formule adaptée.
+              </p>
+
+              <div className="space-y-3 mb-6">
+                {PLANS.map(plan => (
+                  <div
+                    key={plan.id}
+                    onClick={() => setSelectedPlan(plan.id)}
+                    className={`relative p-4 rounded-xl border cursor-pointer transition-all
+                      ${selectedPlan === plan.id
+                        ? 'border-amber-500/60 bg-amber-500/8'
+                        : 'border-white/10 bg-white/3 hover:border-white/20'}`}
+                  >
+                    {plan.popular && (
+                      <span className="absolute -top-2.5 left-4 bg-amber-500 text-white
+                                       text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                        Le plus populaire
+                      </span>
+                    )}
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-white font-bold text-sm">{plan.name}</span>
+                          <span className="text-amber-400 font-bold">{plan.price} €<span className="text-gray-500 text-xs font-normal">/mois</span></span>
+                        </div>
+                        <ul className="space-y-1">
+                          {plan.features.map(f => (
+                            <li key={f} className="flex items-center gap-1.5 text-xs text-gray-400">
+                              <CheckCircle2 className="w-3 h-3 text-green-400 shrink-0" />
+                              {f}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className={`w-5 h-5 rounded-full border-2 shrink-0 mt-0.5 transition-all
+                        ${selectedPlan === plan.id
+                          ? 'border-amber-500 bg-amber-500'
+                          : 'border-white/20'}`}>
+                        {selectedPlan === plan.id && (
+                          <div className="w-full h-full rounded-full flex items-center justify-center">
+                            <div className="w-2 h-2 bg-white rounded-full" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Message informatif si plan sélectionné */}
+              {selectedPlan && (
+                <div className="flex items-center gap-2 px-4 py-3 bg-blue-400/8 border border-blue-400/20
+                                rounded-xl mb-4 text-xs text-blue-300">
+                  <Zap className="w-3.5 h-3.5 shrink-0" />
+                  Votre plan {PLANS.find(p => p.id === selectedPlan)?.name} sera activé
+                  après la période d'essai gratuit.
+                </div>
+              )}
+
+              <button
+                onClick={() => handleFinish(selectedPlan)}
+                disabled={saving}
+                className="w-full py-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-50
+                           text-white font-bold rounded-xl transition-colors
+                           flex items-center justify-center gap-2 mb-3"
+              >
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                {saving ? 'Finalisation…' : 'Accéder à mon tableau de bord →'}
+              </button>
+
+              <button
+                onClick={() => handleFinish(null)}
+                className="w-full text-center text-sm text-gray-500 hover:text-gray-300 transition-colors py-1"
+              >
+                Continuer avec l'essai gratuit →
+              </button>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  )
+}

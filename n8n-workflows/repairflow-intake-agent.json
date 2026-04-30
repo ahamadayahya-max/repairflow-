@@ -1,0 +1,311 @@
+{
+  "meta": {
+    "instanceId": "repairflow",
+    "description": "Agent d'intake IA — Reçoit les SMS/WhatsApp clients, appelle Claude pour extraire les infos de réparation, crée le ticket Supabase ou pose une question de clarification, puis envoie la réponse par SMS via Brevo."
+  },
+  "name": "RepairFlow — Intake Agent IA",
+  "active": false,
+  "nodes": [
+
+    {
+      "id": "a1b2c3d4-0001-0000-0000-000000000001",
+      "name": "Recevoir message client",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "intake/message",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "notes": "Payload attendu : { from_phone, from_name, message, channel, conversation_history[] }"
+    },
+
+    {
+      "id": "a1b2c3d4-0002-0000-0000-000000000002",
+      "name": "Valider et normaliser",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "jsCode": "// Valide le secret webhook et normalise les champs d'entrée\nconst secret = $input.first().json.headers?.['x-webhook-secret'];\nif (secret !== $env.N8N_WEBHOOK_SECRET) {\n  throw new Error('Unauthorized');\n}\n\nconst body = $input.first().json.body;\n\nconst fromPhone = String(body.from_phone || '')\n  .replace(/\\s/g, '')\n  .replace(/^00/, '+');\n\nif (!fromPhone || !fromPhone.startsWith('+')) {\n  throw new Error('from_phone invalide : format E.164 requis');\n}\n\nconst message = String(body.message || '').trim();\nif (!message) {\n  throw new Error('message vide');\n}\n\nconst fromName  = String(body.from_name  || 'Client').trim();\nconst channel   = ['sms','whatsapp','web'].includes(body.channel) ? body.channel : 'sms';\nconst history   = Array.isArray(body.conversation_history) ? body.conversation_history : [];\n\n// Sépare first_name / last_name\nconst parts      = fromName.trim().split(' ');\nconst firstName  = parts[0] || fromName;\nconst lastName   = parts.slice(1).join(' ') || '';\n\nreturn [{\n  json: {\n    fromPhone,\n    fromName,\n    firstName,\n    lastName,\n    message,\n    channel,\n    history\n  }\n}];"
+      }
+    },
+
+    {
+      "id": "a1b2c3d4-0003-0000-0000-000000000003",
+      "name": "Upsert contact Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/rpc/upsert_contact",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" },
+            { "name": "Prefer",        "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "p_first_name": "={{ $json.firstName }}",
+          "p_last_name":  "={{ $json.lastName }}",
+          "p_phone":      "={{ $json.fromPhone }}",
+          "p_email":      null
+        },
+        "options": {}
+      },
+      "notes": "Retourne le contact créé ou mis à jour. contact.id est utilisé pour l'intake_conversations."
+    },
+
+    {
+      "id": "a1b2c3d4-0004-0000-0000-000000000004",
+      "name": "Construire requête Claude",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300],
+      "parameters": {
+        "jsCode": "// Récupère les données des nœuds précédents\nconst normalized = $('Valider et normaliser').first().json;\nconst contactRaw = $input.first().json;\n\n// contact peut être objet direct ou tableau selon Supabase\nconst contact = Array.isArray(contactRaw) ? contactRaw[0] : contactRaw;\nconst contactId = contact?.id || null;\n\n// Reconstruit l'historique de conversation pour Claude\n// Format attendu : [{ role: 'user'|'assistant', content: string }]\nconst history = (normalized.history || []).map(m => ({\n  role:    m.role === 'assistant' ? 'assistant' : 'user',\n  content: String(m.content)\n}));\n\n// Ajoute le message courant en dernier\nconst messages = [\n  ...history,\n  { role: 'user', content: normalized.message }\n];\n\n// System prompt avec shop_name injecté\nconst shopName = $env.NEXT_PUBLIC_SHOP_NAME || 'notre atelier';\nconst systemPrompt = `Tu es l'assistant virtuel de l'atelier de réparation \"${shopName}\". Tu reçois des messages de clients décrivant leurs appareils en panne.\\n\\nTon rôle :\\n1. Analyser le message du client\\n2. Extraire les informations nécessaires à la création d'un ticket de réparation\\n3. Si des informations manquent, poser UNE seule question à la fois, dans cet ordre de priorité : type d'appareil → description du problème → marque → modèle\\n4. Si tu as toutes les informations minimales (type + description), créer le ticket\\n5. Si la demande est hors périmètre (pas une réparation électronique), rediriger poliment\\n\\nInformations à extraire :\\n- device_type : smartphone | tablet | laptop | console | tv | appliance | other\\n- device_brand : marque de l'appareil (optionnel)\\n- device_model : modèle précis (optionnel)\\n- issue_description : description du problème (minimum 10 mots)\\n- urgency : low | normal | high\\n\\nRègles absolues :\\n- Toujours répondre en français\\n- Ne jamais inventer des informations non fournies par le client\\n- Ne jamais promettre un prix ou un délai\\n- Être chaleureux, professionnel, et concis (maximum 2 phrases par réponse)\\n- Ne jamais mentionner que tu es une IA sauf si le client le demande explicitement\\n\\nFormat de ta réponse : JSON uniquement, sans texte avant ou après, sans backticks.\\n\\n{\\n  \"action\": \"create_ticket\" | \"ask_question\" | \"out_of_scope\" | \"unclear\",\\n  \"confidence\": 0.0,\\n  \"client_message_to_send\": \"message à envoyer au client\",\\n  \"question_focus\": \"device_type | device_brand | device_model | issue_description | null\",\\n  \"ticket_data\": {\\n    \"device_type\": \"string | null\",\\n    \"device_brand\": \"string | null\",\\n    \"device_model\": \"string | null\",\\n    \"issue_description\": \"string | null\",\\n    \"urgency\": \"low | normal | high\"\\n  }\\n}`;\n\nreturn [{\n  json: {\n    fromPhone:  normalized.fromPhone,\n    fromName:   normalized.fromName,\n    channel:    normalized.channel,\n    contactId,\n    claudeBody: {\n      model:      'claude-opus-4-5',\n      max_tokens: 500,\n      system:     systemPrompt,\n      messages\n    }\n  }\n}];"
+      }
+    },
+
+    {
+      "id": "a1b2c3d4-0005-0000-0000-000000000005",
+      "name": "Appeler Claude API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key",          "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version",   "value": "2023-06-01" },
+            { "name": "content-type",        "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json.claudeBody) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "continueOnFail": true,
+      "notes": "En cas d'erreur (timeout, quota), continueOnFail permet au workflow de gérer l'échec gracieusement."
+    },
+
+    {
+      "id": "a1b2c3d4-0006-0000-0000-000000000006",
+      "name": "Parser réponse Claude",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300],
+      "parameters": {
+        "jsCode": "const prev   = $('Construire requête Claude').first().json;\nconst raw    = $input.first().json;\n\n// Si le nœud précédent a échoué (continueOnFail)\nif (raw.error) {\n  return [{\n    json: {\n      ...prev,\n      action: 'unclear',\n      confidence: 0,\n      client_message_to_send: 'Je suis momentanément indisponible. Nous vous recontacterons rapidement.',\n      ticket_data: { device_type: null, device_brand: null, device_model: null, issue_description: null, urgency: 'normal' }\n    }\n  }];\n}\n\n// Extrait le texte brut retourné par Claude\nlet rawText = '';\ntry {\n  rawText = raw.content[0].text.trim();\n} catch {\n  rawText = '';\n}\n\n// Parse le JSON retourné par Claude\n// Claude peut parfois ajouter du texte parasite malgré les consignes\nlet parsed = null;\ntry {\n  const match = rawText.match(/\\{[\\s\\S]*\\}/);\n  if (match) parsed = JSON.parse(match[0]);\n} catch {\n  parsed = null;\n}\n\nif (!parsed || !['create_ticket','ask_question','out_of_scope','unclear'].includes(parsed.action)) {\n  parsed = {\n    action: 'unclear',\n    confidence: 0,\n    client_message_to_send: 'Je n\\'ai pas bien compris votre demande. Pouvez-vous reformuler ?',\n    question_focus: null,\n    ticket_data: { device_type: null, device_brand: null, device_model: null, issue_description: null, urgency: 'normal' }\n  };\n}\n\nreturn [{\n  json: {\n    fromPhone:  prev.fromPhone,\n    fromName:   prev.fromName,\n    channel:    prev.channel,\n    contactId:  prev.contactId,\n    action:     parsed.action,\n    confidence: parsed.confidence || 0,\n    clientMsg:  parsed.client_message_to_send || '',\n    ticketData: parsed.ticket_data || {},\n    questionFocus: parsed.question_focus || null\n  }\n}];"
+      }
+    },
+
+    {
+      "id": "a1b2c3d4-0007-0000-0000-000000000007",
+      "name": "Router selon action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1560, 300],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [{ "leftValue": "={{ $json.action }}", "rightValue": "create_ticket", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "create_ticket"
+            },
+            {
+              "conditions": {
+                "conditions": [{ "leftValue": "={{ $json.action }}", "rightValue": "ask_question", "operator": { "type": "string", "operation": "equals" } }],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ask_question"
+            }
+          ]
+        },
+        "fallbackOutput": 2,
+        "options": {}
+      },
+      "notes": "Output 0 → create_ticket | Output 1 → ask_question | Output 2 (fallback) → out_of_scope / unclear"
+    },
+
+    {
+      "id": "a1b2c3d4-0008-0000-0000-000000000008",
+      "name": "Créer ticket Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 160],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/rpc/fn_intake_create_ticket",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "p_phone":             "={{ $json.fromPhone }}",
+          "p_customer_name":     "={{ $json.fromName }}",
+          "p_device_type":       "={{ $json.ticketData.device_type || 'other' }}",
+          "p_device_brand":      "={{ $json.ticketData.device_brand || null }}",
+          "p_device_model":      "={{ $json.ticketData.device_model || null }}",
+          "p_issue_description": "={{ $json.ticketData.issue_description }}"
+        },
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+
+    {
+      "id": "a1b2c3d4-0009-0000-0000-000000000009",
+      "name": "Message confirmation ticket",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 160],
+      "parameters": {
+        "jsCode": "const parsed = $('Parser réponse Claude').first().json;\nconst ticketResult = $input.first().json;\n\n// Récupère le tracking_token retourné par la RPC\nconst result = Array.isArray(ticketResult) ? ticketResult[0] : ticketResult;\nconst token  = result?.tracking_token || result?.data?.tracking_token || null;\n\nconst baseUrl    = $env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';\nconst trackUrl   = token ? `${baseUrl}/track/${token}` : null;\n\nlet replyMsg = parsed.clientMsg || 'Votre demande a bien ete enregistree. Notre equipe prendra contact avec vous rapidement.';\n\nif (trackUrl) {\n  replyMsg = `Parfait ! Votre dossier de reparation a ete ouvert. Suivez l\\'avancement ici : ${trackUrl}`;\n}\n\nreturn [{\n  json: {\n    fromPhone: parsed.fromPhone,\n    channel:   parsed.channel,\n    replyMsg,\n    action:    'create_ticket',\n    token\n  }\n}];"
+      }
+    },
+
+    {
+      "id": "a1b2c3d4-0010-0000-0000-000000000010",
+      "name": "Message question clarification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 320],
+      "parameters": {
+        "jsCode": "const parsed = $input.first().json;\n\nreturn [{\n  json: {\n    fromPhone: parsed.fromPhone,\n    channel:   parsed.channel,\n    replyMsg:  parsed.clientMsg,\n    action:    'ask_question'\n  }\n}];"
+      }
+    },
+
+    {
+      "id": "a1b2c3d4-0011-0000-0000-000000000011",
+      "name": "Message fallback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 460],
+      "parameters": {
+        "jsCode": "const parsed = $input.first().json;\n\nconst shopName  = $env.NEXT_PUBLIC_SHOP_NAME  || 'notre atelier';\nconst shopPhone = $env.NEXT_PUBLIC_SHOP_PHONE || '';\n\nconst replyMsg = parsed.clientMsg ||\n  `Je suis l'assistant de ${shopName} pour les reparations electroniques. Pour toute autre demande, appelez-nous${shopPhone ? ' au ' + shopPhone : ''}.`;\n\nreturn [{\n  json: {\n    fromPhone: parsed.fromPhone,\n    channel:   parsed.channel,\n    replyMsg,\n    action:    parsed.action\n  }\n}];"
+      }
+    },
+
+    {
+      "id": "a1b2c3d4-0012-0000-0000-000000000012",
+      "name": "Envoyer SMS Brevo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2200, 320],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.brevo.com/v3/transactionalSMS/sms",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "api-key",      "value": "={{ $env.BREVO_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "sender":    "RepairFlow",
+          "recipient": "={{ $json.fromPhone }}",
+          "content":   "={{ $json.replyMsg }}"
+        },
+        "options": { "timeout": 10000 }
+      },
+      "continueOnFail": true,
+      "notes": "continueOnFail=true : l'envoi SMS est non-bloquant. L'action est déjà réalisée (ticket créé ou question posée)."
+    },
+
+    {
+      "id": "a1b2c3d4-0013-0000-0000-000000000013",
+      "name": "Répondre 200 OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2420, 320],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, action: $('Parser réponse Claude').first().json.action, reply_sent: !$json.error }) }}",
+        "options": { "responseCode": 200 }
+      }
+    }
+
+  ],
+
+  "connections": {
+    "Recevoir message client": {
+      "main": [[{ "node": "Valider et normaliser", "type": "main", "index": 0 }]]
+    },
+    "Valider et normaliser": {
+      "main": [[{ "node": "Upsert contact Supabase", "type": "main", "index": 0 }]]
+    },
+    "Upsert contact Supabase": {
+      "main": [[{ "node": "Construire requête Claude", "type": "main", "index": 0 }]]
+    },
+    "Construire requête Claude": {
+      "main": [[{ "node": "Appeler Claude API", "type": "main", "index": 0 }]]
+    },
+    "Appeler Claude API": {
+      "main": [[{ "node": "Parser réponse Claude", "type": "main", "index": 0 }]]
+    },
+    "Parser réponse Claude": {
+      "main": [[{ "node": "Router selon action", "type": "main", "index": 0 }]]
+    },
+    "Router selon action": {
+      "main": [
+        [{ "node": "Créer ticket Supabase",          "type": "main", "index": 0 }],
+        [{ "node": "Message question clarification",  "type": "main", "index": 0 }],
+        [{ "node": "Message fallback",                "type": "main", "index": 0 }]
+      ]
+    },
+    "Créer ticket Supabase": {
+      "main": [[{ "node": "Message confirmation ticket", "type": "main", "index": 0 }]]
+    },
+    "Message confirmation ticket": {
+      "main": [[{ "node": "Envoyer SMS Brevo", "type": "main", "index": 0 }]]
+    },
+    "Message question clarification": {
+      "main": [[{ "node": "Envoyer SMS Brevo", "type": "main", "index": 0 }]]
+    },
+    "Message fallback": {
+      "main": [[{ "node": "Envoyer SMS Brevo", "type": "main", "index": 0 }]]
+    },
+    "Envoyer SMS Brevo": {
+      "main": [[{ "node": "Répondre 200 OK", "type": "main", "index": 0 }]]
+    }
+  },
+
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "tags": ["repairflow", "intake", "ia", "sms"]
+}

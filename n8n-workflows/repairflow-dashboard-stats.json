@@ -1,0 +1,247 @@
+{
+  "name": "RepairFlow — Dashboard Stats API",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "id": "repairflow-dashboard-stats-v1",
+  "meta": {
+    "description": "Endpoint GET /dashboard/stats protégé par X-Api-Key. Agrège les KPIs Supabase, les derniers tickets et le CA mensuel. Répond avec Cache-Control: max-age=300."
+  },
+  "nodes": [
+
+    {
+      "id": "node-webhook",
+      "name": "Get Dashboard Stats",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 280],
+      "webhookId": "repairflow-dashboard-stats",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "dashboard/stats",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+
+    {
+      "id": "node-check-key",
+      "name": "Check API Key",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 280],
+      "parameters": {
+        "jsCode": "// n8n normalise les noms de headers en minuscules\nconst headers     = $input.first().json.headers ?? {};\nconst receivedKey = headers['x-api-key'] ?? headers['X-Api-Key'] ?? '';\nconst expectedKey = $env.DASHBOARD_API_KEY ?? '';\n\nif (!expectedKey) {\n  // Mauvaise configuration serveur — on refuse plutôt que d'accepter n'importe quoi\n  return [{ json: { isAuthorized: false, errorMessage: 'Configuration manquante : DASHBOARD_API_KEY non défini sur le serveur.' } }];\n}\n\nif (!receivedKey || receivedKey !== expectedKey) {\n  return [{ json: { isAuthorized: false, errorMessage: 'unauthorized' } }];\n}\n\nreturn [{ json: { isAuthorized: true } }];"
+      }
+    },
+
+    {
+      "id": "node-if-auth",
+      "name": "API Key Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [480, 280],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "cond-auth",
+              "leftValue": "={{ $json.isAuthorized }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equal" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+
+    {
+      "id": "node-respond-401",
+      "name": "Return 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [720, 460],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 401,
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.errorMessage }) }}"
+      }
+    },
+
+    {
+      "id": "node-rpc-stats",
+      "name": "Call get_dashboard_stats RPC",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 180],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/get_dashboard_stats",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}",
+        "options": {
+          "response": { "response": { "responseFormat": "json" } }
+        }
+      }
+    },
+
+    {
+      "id": "node-fetch-recent",
+      "name": "Fetch Recent Tickets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 180],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/repair_tickets",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Range",         "value": "0-9" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "order",  "value": "created_at.desc" },
+            { "name": "select", "value": "id,tracking_token,status,device_type,device_brand,device_model,created_at,contacts(name,phone)" }
+          ]
+        },
+        "options": {
+          "response": { "response": { "responseFormat": "json" } }
+        }
+      }
+    },
+
+    {
+      "id": "node-fetch-revenue",
+      "name": "Fetch Revenue This Month",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 180],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/repair_tickets",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "status",     "value": "eq.delivered" },
+            { "name": "closed_at",  "value": "=gte.{{ new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString() }}" },
+            { "name": "select",     "value": "price_final,closed_at" }
+          ]
+        },
+        "options": {
+          "response": { "response": { "responseFormat": "json" } }
+        }
+      }
+    },
+
+    {
+      "id": "node-merge-stats",
+      "name": "Merge All Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 180],
+      "parameters": {
+        "jsCode": "// --- KPIs Supabase (RPC get_dashboard_stats) ---\nconst rpcRaw = $('Call get_dashboard_stats RPC').first().json;\n// La RPC retourne un objet JSON ou une chaîne selon la config Supabase\nconst kpis = typeof rpcRaw === 'string' ? JSON.parse(rpcRaw) : rpcRaw;\n\n// --- Derniers tickets ---\nconst recentRaw  = $('Fetch Recent Tickets').first().json;\nconst recentTickets = Array.isArray(recentRaw) ? recentRaw : [recentRaw].filter(Boolean);\n\n// --- CA du mois (recalcul côté n8n pour double-vérification) ---\nconst revenueRaw  = $('Fetch Revenue This Month').first().json;\nconst revenueRows = Array.isArray(revenueRaw) ? revenueRaw : [revenueRaw].filter(Boolean);\n\nconst monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);\n\nconst revenue_month_n8n = revenueRows\n  .filter(r => r.closed_at && new Date(r.closed_at) >= monthStart && r.price_final != null)\n  .reduce((sum, r) => sum + Number(r.price_final), 0);\n\n// --- Statistiques de composition de statut sur les tickets récents ---\nconst statusBreakdown = recentTickets.reduce((acc, t) => {\n  acc[t.status] = (acc[t.status] ?? 0) + 1;\n  return acc;\n}, {});\n\nreturn [{\n  json: {\n    // KPIs provenant de la RPC Supabase\n    tickets_open:          kpis.tickets_open          ?? 0,\n    tickets_today:         kpis.tickets_today         ?? 0,\n    tickets_waiting_parts: kpis.tickets_waiting_parts ?? 0,\n    tickets_ready:         kpis.tickets_ready         ?? 0,\n    avg_repair_hours:      kpis.avg_repair_hours      ?? null,\n    revenue_month:         kpis.revenue_month         ?? 0,\n    top_device_types:      kpis.top_device_types      ?? [],\n\n    // CA mensuel recalculé côté n8n (cross-check)\n    revenue_month_calculated: Math.round(revenue_month_n8n * 100) / 100,\n\n    // Derniers tickets pour le widget UI\n    recent_tickets: recentTickets,\n    recent_tickets_count: recentTickets.length,\n\n    // Répartition des statuts sur les 10 derniers tickets\n    recent_status_breakdown: statusBreakdown,\n\n    // Méta\n    generated_at: new Date().toISOString(),\n    cache_ttl:    300\n  }\n}];"
+      }
+    },
+
+    {
+      "id": "node-respond-200",
+      "name": "Return Stats",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1680, 180],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Cache-Control", "value": "max-age=300, private" },
+              { "name": "Content-Type",  "value": "application/json; charset=utf-8" },
+              { "name": "X-Generated-At","value": "={{ $json.generated_at }}" }
+            ]
+          }
+        }
+      }
+    }
+
+  ],
+
+  "connections": {
+
+    "Get Dashboard Stats": {
+      "main": [
+        [{ "node": "Check API Key", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Check API Key": {
+      "main": [
+        [{ "node": "API Key Valid?", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "API Key Valid?": {
+      "main": [
+        [{ "node": "Call get_dashboard_stats RPC", "type": "main", "index": 0 }],
+        [{ "node": "Return 401",                   "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Call get_dashboard_stats RPC": {
+      "main": [
+        [{ "node": "Fetch Recent Tickets", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Fetch Recent Tickets": {
+      "main": [
+        [{ "node": "Fetch Revenue This Month", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Fetch Revenue This Month": {
+      "main": [
+        [{ "node": "Merge All Stats", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Merge All Stats": {
+      "main": [
+        [{ "node": "Return Stats", "type": "main", "index": 0 }]
+      ]
+    }
+
+  }
+}

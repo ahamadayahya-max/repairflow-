@@ -1,0 +1,386 @@
+{
+  "name": "RepairFlow — Création de ticket",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "id": "repairflow-create-ticket-v1",
+  "meta": {
+    "description": "Création d'un ticket de réparation : validation du payload, upsert contact Supabase, création ticket, notifications SMS et Email via Brevo.",
+    "templateId": ""
+  },
+  "nodes": [
+
+    {
+      "id": "node-webhook",
+      "name": "Receive Repair Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "repairflow-create-ticket",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "repair/create",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+
+    {
+      "id": "node-validate",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "jsCode": "// Extraction du body (n8n place le body dans json.body en mode Webhook)\nconst body = $input.first().json.body ?? $input.first().json;\n\n// Nettoyage des chaînes\nconst contact_name      = String(body.contact_name      ?? '').trim();\nconst contact_phone     = String(body.contact_phone     ?? '').trim();\nconst contact_email     = String(body.contact_email     ?? '').trim();\nconst device_type       = String(body.device_type       ?? '').trim();\nconst device_brand      = String(body.device_brand      ?? '').trim();\nconst device_model      = String(body.device_model      ?? '').trim();\nconst issue_description = String(body.issue_description ?? '').trim();\nconst price_estimate    = body.price_estimate !== undefined ? Number(body.price_estimate) : null;\n\nconst DEVICE_TYPES = ['smartphone', 'tablet', 'laptop', 'console', 'tv', 'appliance', 'other'];\n\n// Validation des champs obligatoires\nif (!contact_name) {\n  return [{ json: { isValid: false, errorMessage: 'contact_name est requis et ne peut pas être vide.' } }];\n}\nif (!contact_phone) {\n  return [{ json: { isValid: false, errorMessage: 'contact_phone est requis et ne peut pas être vide.' } }];\n}\nif (!device_type || !DEVICE_TYPES.includes(device_type)) {\n  return [{ json: { isValid: false, errorMessage: 'device_type est invalide. Valeurs acceptées : ' + DEVICE_TYPES.join(', ') } }];\n}\nif (!issue_description || issue_description.length < 10) {\n  return [{ json: { isValid: false, errorMessage: 'issue_description est requis et doit contenir au moins 10 caractères.' } }];\n}\nif (price_estimate !== null && isNaN(price_estimate)) {\n  return [{ json: { isValid: false, errorMessage: 'price_estimate doit être un nombre valide.' } }];\n}\n\n// Données nettoyées et validées\nreturn [{\n  json: {\n    isValid: true,\n    contact_name,\n    contact_phone,\n    contact_email: contact_email || null,\n    device_type,\n    device_brand:       device_brand       || null,\n    device_model:       device_model       || null,\n    issue_description,\n    price_estimate:     price_estimate !== null && !isNaN(price_estimate) ? price_estimate : null\n  }\n}];"
+      }
+    },
+
+    {
+      "id": "node-if-valid",
+      "name": "Is Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [480, 300],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-isvalid",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+
+    {
+      "id": "node-respond-400",
+      "name": "Return Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [720, 480],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 400,
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.errorMessage }) }}"
+      }
+    },
+
+    {
+      "id": "node-upsert-contact",
+      "name": "Upsert Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rpc/upsert_contact",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_name: $json.contact_name, p_phone: $json.contact_phone, p_email: $json.contact_email }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      }
+    },
+
+    {
+      "id": "node-create-ticket",
+      "name": "Create Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/repair_tickets",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" },
+            { "name": "Prefer",        "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contact_id: $json, device_type: $('Validate Input').first().json.device_type, device_brand: $('Validate Input').first().json.device_brand, device_model: $('Validate Input').first().json.device_model, issue_description: $('Validate Input').first().json.issue_description, price_estimate: $('Validate Input').first().json.price_estimate, status: 'received' }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      }
+    },
+
+    {
+      "id": "node-build-url",
+      "name": "Build Tracking URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 200],
+      "parameters": {
+        "jsCode": "// Supabase retourne un tableau avec Prefer: return=representation\nconst ticketArray = $input.first().json;\nconst ticket = Array.isArray(ticketArray) ? ticketArray[0] : ticketArray;\n\nif (!ticket || !ticket.tracking_token) {\n  throw new Error('TICKET_CREATION_ERROR: tracking_token absent de la réponse Supabase.');\n}\n\n// upsert_contact retourne directement l'UUID (scalaire JSON)\nconst contactIdRaw = $('Upsert Contact').first().json;\nconst contactId = typeof contactIdRaw === 'string' ? contactIdRaw : String(contactIdRaw);\n\nconst validatedData = $('Validate Input').first().json;\nconst trackingUrl = `${$env.APP_URL}/track/${ticket.tracking_token}`;\n\nreturn [{\n  json: {\n    ticket_id:      ticket.id,\n    tracking_token: ticket.tracking_token,\n    tracking_url:   trackingUrl,\n    contact_id:     contactId,\n    contact_name:   validatedData.contact_name,\n    contact_phone:  validatedData.contact_phone,\n    contact_email:  validatedData.contact_email,\n    device_brand:   validatedData.device_brand  ?? '',\n    device_model:   validatedData.device_model  ?? ''\n  }\n}];"
+      }
+    },
+
+    {
+      "id": "node-switch-email",
+      "name": "Has Email?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1440, 200],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "cond-has-email",
+                    "leftValue": "={{ $json.contact_email }}",
+                    "rightValue": "",
+                    "operator": {
+                      "name": "filter.operator.notEmpty",
+                      "type": "string",
+                      "operation": "notEmpty"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputIndex": 0,
+              "renameOutput": true,
+              "outputKey": "has_email"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": 1
+        }
+      }
+    },
+
+    {
+      "id": "node-send-email",
+      "name": "Send Welcome Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 100],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.brevo.com/v3/smtp/email",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "api-key",      "value": "={{ $env.BREVO_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sender: { name: 'RepairFlow', email: 'noreply@repairflow.fr' }, to: [{ email: $json.contact_email, name: $json.contact_name }], subject: 'Votre réparation a bien été enregistrée', htmlContent: '<p>Bonjour ' + $json.contact_name + ',</p><p>Votre <strong>' + ($json.device_brand || '') + ' ' + ($json.device_model || '') + '</strong> a bien été reçu dans notre atelier.</p><p>Suivez l\\'avancement de votre réparation en temps réel ici :</p><p><a href=\\'' + $json.tracking_url + '\\'>' + $json.tracking_url + '</a></p><p>L\\'équipe RepairFlow</p>' }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      }
+    },
+
+    {
+      "id": "node-send-sms",
+      "name": "Send Welcome SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1920, 200],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.brevo.com/v3/transactionalSMS/sms",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "api-key",      "value": "={{ $env.BREVO_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sender: 'RepairFlow', recipient: $('Build Tracking URL').first().json.contact_phone, content: 'Bonjour ' + $('Build Tracking URL').first().json.contact_name + ', votre appareil a bien ete recu. Suivez votre reparation : ' + $('Build Tracking URL').first().json.tracking_url }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      }
+    },
+
+    {
+      "id": "node-build-response",
+      "name": "Build Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 200],
+      "parameters": {
+        "jsCode": "// Récupère les données préparées par Build Tracking URL\nconst data = $('Build Tracking URL').first().json;\n\n// L'email a été envoyé si contact_email était renseigné (le Switch l'a routé vers Send Welcome Email)\nconst notifications_sent = ['sms'];\nif (data.contact_email) {\n  notifications_sent.push('email');\n}\n\nreturn [{\n  json: {\n    success:        true,\n    ticket_id:      data.ticket_id,\n    tracking_token: data.tracking_token,\n    tracking_url:   data.tracking_url,\n    contact_id:     data.contact_id,\n    notifications_sent\n  }\n}];"
+      }
+    },
+
+    {
+      "id": "node-respond-200",
+      "name": "Return Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2400, 200],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify($json) }}"
+      }
+    },
+
+    {
+      "id": "node-error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 600],
+      "parameters": {}
+    },
+
+    {
+      "id": "node-respond-500",
+      "name": "Return Internal Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [240, 600],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 500,
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'internal_error', detail: $json.execution.error.message ?? 'Une erreur inattendue est survenue.' }) }}"
+      }
+    }
+
+  ],
+
+  "connections": {
+
+    "Receive Repair Request": {
+      "main": [
+        [{ "node": "Validate Input", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Validate Input": {
+      "main": [
+        [{ "node": "Is Valid?", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Is Valid?": {
+      "main": [
+        [{ "node": "Upsert Contact",         "type": "main", "index": 0 }],
+        [{ "node": "Return Validation Error", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Upsert Contact": {
+      "main": [
+        [{ "node": "Create Ticket", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Create Ticket": {
+      "main": [
+        [{ "node": "Build Tracking URL", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Build Tracking URL": {
+      "main": [
+        [{ "node": "Has Email?", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Has Email?": {
+      "main": [
+        [{ "node": "Send Welcome Email", "type": "main", "index": 0 }],
+        [{ "node": "Send Welcome SMS",   "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Send Welcome Email": {
+      "main": [
+        [{ "node": "Send Welcome SMS", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Send Welcome SMS": {
+      "main": [
+        [{ "node": "Build Response", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Build Response": {
+      "main": [
+        [{ "node": "Return Success", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Error Trigger": {
+      "main": [
+        [{ "node": "Return Internal Error", "type": "main", "index": 0 }]
+      ]
+    }
+
+  }
+}

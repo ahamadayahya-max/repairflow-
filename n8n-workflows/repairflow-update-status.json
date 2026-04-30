@@ -1,0 +1,468 @@
+{
+  "name": "RepairFlow — Changement de statut + notifications",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "id": "repairflow-update-status-v1",
+  "meta": {
+    "description": "Mise à jour du statut d'un ticket avec validation de la matrice de transitions, PATCH Supabase et envoi de notifications SMS + Email Brevo adaptées au nouveau statut."
+  },
+  "nodes": [
+
+    {
+      "id": "node-webhook",
+      "name": "Receive Status Update",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 280],
+      "webhookId": "repairflow-update-status",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "repair/update-status",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+
+    {
+      "id": "node-validate",
+      "name": "Validate Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 280],
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body ?? $input.first().json;\n\nconst ticket_id          = String(body.ticket_id          ?? '').trim();\nconst new_status         = String(body.new_status         ?? '').trim();\nconst internal_note      = String(body.internal_note      ?? '').trim() || null;\nconst estimated_ready_at = body.estimated_ready_at ?? null;\nconst price_final        = body.price_final !== undefined ? Number(body.price_final) : null;\n\nconst VALID_STATUSES = [\n  'received','diagnosed','waiting_approval','in_repair',\n  'waiting_parts','ready','delivered','cancelled'\n];\nconst UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;\n\nif (!ticket_id) {\n  return [{ json: { isValid: false, errorMessage: 'ticket_id est requis.' } }];\n}\nif (!UUID_REGEX.test(ticket_id)) {\n  return [{ json: { isValid: false, errorMessage: 'ticket_id doit être un UUID valide.' } }];\n}\nif (!new_status) {\n  return [{ json: { isValid: false, errorMessage: 'new_status est requis.' } }];\n}\nif (!VALID_STATUSES.includes(new_status)) {\n  return [{ json: { isValid: false, errorMessage: `new_status invalide. Valeurs acceptées : ${VALID_STATUSES.join(', ')}` } }];\n}\n// price_final obligatoire quand le ticket passe à ready\nif (new_status === 'ready' && (price_final === null || isNaN(price_final) || price_final < 0)) {\n  return [{ json: { isValid: false, errorMessage: 'price_final est requis et doit être un nombre positif lorsque new_status = ready.' } }];\n}\n\nreturn [{\n  json: {\n    isValid: true,\n    ticket_id,\n    new_status,\n    internal_note,\n    estimated_ready_at,\n    price_final\n  }\n}];"
+      }
+    },
+
+    {
+      "id": "node-if-valid",
+      "name": "Payload Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [480, 280],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "cond-isvalid",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equal" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+
+    {
+      "id": "node-respond-400",
+      "name": "Return 400",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [720, 460],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 400,
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.errorMessage }) }}"
+      }
+    },
+
+    {
+      "id": "node-fetch-ticket",
+      "name": "Fetch Ticket + Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 180],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/repair_tickets",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "id",     "value": "=eq.{{ $json.ticket_id }}" },
+            { "name": "select", "value": "*,contacts(*)" }
+          ]
+        },
+        "options": {
+          "response": { "response": { "responseFormat": "json" } }
+        }
+      }
+    },
+
+    {
+      "id": "node-check-transition",
+      "name": "Check Ticket + Validate Transition",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 180],
+      "parameters": {
+        "jsCode": "const payload   = $('Validate Payload').first().json;\nconst httpResp  = $input.first().json;\n\n// Supabase retourne un tableau avec select\nconst tickets = Array.isArray(httpResp) ? httpResp : [httpResp];\n\nif (!tickets.length || !tickets[0] || !tickets[0].id) {\n  return [{ json: { errorCode: 404, errorMessage: `Ticket ${payload.ticket_id} introuvable.` } }];\n}\n\nconst ticket  = tickets[0];\nconst contact = ticket.contacts ?? {};\nconst current_status = ticket.status;\nconst new_status     = payload.new_status;\n\n// Matrice des transitions autorisées (unidirectionnelle, règle métier non négociable)\nconst ALLOWED = {\n  received:         ['diagnosed', 'cancelled'],\n  diagnosed:        ['waiting_approval', 'in_repair', 'cancelled'],\n  waiting_approval: ['in_repair', 'cancelled'],\n  in_repair:        ['waiting_parts', 'ready', 'cancelled'],\n  waiting_parts:    ['in_repair', 'ready', 'cancelled'],\n  ready:            ['delivered', 'cancelled'],\n  delivered:        [],\n  cancelled:        []\n};\n\nconst allowed = ALLOWED[current_status] ?? [];\nif (!allowed.includes(new_status)) {\n  return [{\n    json: {\n      errorCode: 409,\n      errorMessage: `Transition ${current_status} → ${new_status} non autorisée. Transitions possibles depuis '${current_status}' : ${allowed.length ? allowed.join(', ') : 'aucune'}.`\n    }\n  }];\n}\n\n// Données consolidées pour les étapes suivantes\nreturn [{\n  json: {\n    errorCode:          null,\n    ticket_id:          ticket.id,\n    tracking_token:     ticket.tracking_token,\n    current_status,\n    new_status:         payload.new_status,\n    internal_note:      payload.internal_note,\n    estimated_ready_at: payload.estimated_ready_at,\n    price_final:        payload.price_final,\n    price_estimate:     ticket.price_estimate ?? null,\n    contact_id:         contact.id   ?? null,\n    contact_name:       contact.name ?? 'Client',\n    contact_phone:      contact.phone ?? null,\n    contact_email:      contact.email ?? null,\n    device_brand:       ticket.device_brand ?? '',\n    device_model:       ticket.device_model ?? ''\n  }\n}];"
+      }
+    },
+
+    {
+      "id": "node-switch-error",
+      "name": "Error Code?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1200, 180],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  {
+                    "id": "cond-404",
+                    "leftValue": "={{ $json.errorCode }}",
+                    "rightValue": 404,
+                    "operator": { "type": "number", "operation": "equal" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputIndex": 0,
+              "renameOutput": true,
+              "outputKey": "not_found"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  {
+                    "id": "cond-409",
+                    "leftValue": "={{ $json.errorCode }}",
+                    "rightValue": 409,
+                    "operator": { "type": "number", "operation": "equal" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputIndex": 1,
+              "renameOutput": true,
+              "outputKey": "invalid_transition"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": 2
+        }
+      }
+    },
+
+    {
+      "id": "node-respond-404",
+      "name": "Return 404",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1440, 60],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 404,
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.errorMessage }) }}"
+      }
+    },
+
+    {
+      "id": "node-respond-409",
+      "name": "Return 409",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1440, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 409,
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.errorMessage }) }}"
+      }
+    },
+
+    {
+      "id": "node-update-status",
+      "name": "Update Ticket Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 180],
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/repair_tickets",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" },
+            { "name": "Prefer",        "value": "return=minimal" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "id", "value": "=eq.{{ $json.ticket_id }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify(Object.assign( { status: $json.new_status }, $json.internal_note      ? { internal_notes:      $json.internal_note      } : {}, $json.estimated_ready_at ? { estimated_ready_at: $json.estimated_ready_at } : {}, $json.price_final !== null && $json.price_final !== undefined ? { price_final: $json.price_final } : {} )) }}",
+        "options": {
+          "response": { "response": { "responseFormat": "json" } }
+        }
+      }
+    },
+
+    {
+      "id": "node-build-content",
+      "name": "Build Notification Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1680, 180],
+      "parameters": {
+        "jsCode": "const data = $('Check Ticket + Validate Transition').first().json;\nconst {\n  contact_name, contact_email,\n  new_status, tracking_token,\n  device_brand, device_model,\n  price_final, price_estimate,\n  estimated_ready_at\n} = data;\n\nconst tracking_url = `${$env.APP_URL}/track/${tracking_token}`;\nconst review_url   = `${$env.APP_URL}/review/${tracking_token}`;\n\n// Libellé lisible de l'appareil (sans accents pour SMS)\nconst device = [device_brand, device_model].filter(Boolean).join(' ') || 'votre appareil';\nconst price  = price_final ?? price_estimate ?? '–';\nconst estimated_date = estimated_ready_at\n  ? new Date(estimated_ready_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })\n  : 'a confirmer';\n\nlet sms_content   = '';\nlet email_subject = '';\nlet email_html    = '';\n\nconst btnStyle = 'display:inline-block;background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold;';\n\nswitch (new_status) {\n\n  case 'diagnosed':\n    sms_content   = `Bonjour ${contact_name}, le diagnostic de votre ${device} est termine. Devis : ${price} EUR. Validez sur : ${tracking_url}`;\n    email_subject = 'Diagnostic terminé — votre accord est requis';\n    email_html    = `<p>Bonjour ${contact_name},</p><p>Le diagnostic de votre <strong>${device}</strong> est terminé.</p><p><strong>Montant estimé : ${price} €</strong></p><p>Merci de valider ou de refuser la réparation depuis votre espace de suivi :</p><p><a href=\"${tracking_url}\" style=\"${btnStyle}\">Valider la réparation</a></p><p>L'équipe RepairFlow</p>`;\n    break;\n\n  case 'waiting_approval':\n    sms_content   = `Rappel RepairFlow : votre devis pour ${device} est en attente de validation. Repondez ici : ${tracking_url}`;\n    email_subject = 'Rappel — Votre devis attend votre réponse';\n    email_html    = `<p>Bonjour ${contact_name},</p><p>Nous attendons toujours votre validation pour la réparation de votre <strong>${device}</strong>.</p><p>Sans réponse de votre part, le dossier sera mis en attente.</p><p><a href=\"${tracking_url}\" style=\"${btnStyle}\">Répondre maintenant</a></p><p>L'équipe RepairFlow</p>`;\n    break;\n\n  case 'in_repair':\n    sms_content   = `Bonne nouvelle ! La reparation de votre ${device} a commence. Suivez l'avancement : ${tracking_url}`;\n    email_subject = 'Réparation en cours';\n    email_html    = `<p>Bonjour ${contact_name},</p><p>La réparation de votre <strong>${device}</strong> a démarré. Notre technicien s'en occupe.</p><p>Suivez l'avancement en temps réel :</p><p><a href=\"${tracking_url}\">${tracking_url}</a></p><p>L'équipe RepairFlow</p>`;\n    break;\n\n  case 'waiting_parts':\n    sms_content   = `Votre ${device} necessite une piece en commande. Delai estime : ${estimated_date}. Infos : ${tracking_url}`;\n    email_subject = 'En attente d\\'une pièce détachée';\n    email_html    = `<p>Bonjour ${contact_name},</p><p>La réparation de votre <strong>${device}</strong> nécessite une pièce détachée actuellement en commande.</p><p><strong>Délai de réception estimé : ${estimated_date}</strong></p><p>Nous vous contacterons dès qu'elle sera reçue. Suivez votre dossier :</p><p><a href=\"${tracking_url}\">${tracking_url}</a></p><p>L'équipe RepairFlow</p>`;\n    break;\n\n  case 'ready':\n    sms_content   = `Votre ${device} est repare et pret a etre recupere ! Montant : ${price_final} EUR. Infos : ${tracking_url}`;\n    email_subject = 'Votre appareil est prêt !';\n    email_html    = `<p>Bonjour ${contact_name},</p><p>Excellente nouvelle ! Votre <strong>${device}</strong> est réparé et vous attend à l'atelier.</p><p><strong>Montant à régler : ${price_final} €</strong></p><hr style=\"margin:20px 0;\"><p><strong>Retrouvez-nous à :</strong><br>123 rue de la Réparation, 75001 Paris<br>Lun – Sam : 9h00 – 19h00</p><hr style=\"margin:20px 0;\"><p><a href=\"${tracking_url}\" style=\"${btnStyle}\">Voir mon dossier</a></p><p>L'équipe RepairFlow</p>`;\n    break;\n\n  case 'delivered':\n    sms_content   = `Merci pour votre confiance RepairFlow ! Votre avis nous aide : ${review_url}`;\n    email_subject = 'Merci — Donnez-nous votre avis !';\n    email_html    = `<p>Bonjour ${contact_name},</p><p>Merci d'avoir fait confiance à RepairFlow pour la réparation de votre <strong>${device}</strong>. Nous espérons que vous êtes satisfait(e) !</p><p>Votre avis est précieux et aide d'autres clients à nous trouver :</p><p><a href=\"${review_url}\" style=\"${btnStyle}\">Laisser un avis</a></p><p>À bientôt !</p><p>L'équipe RepairFlow</p>`;\n    break;\n\n  case 'cancelled':\n    sms_content   = `Votre dossier RepairFlow (${device}) a ete clos. Pour toute question, contactez notre atelier.`;\n    email_subject = 'Votre dossier a été clôturé';\n    email_html    = `<p>Bonjour ${contact_name},</p><p>Votre dossier de réparation pour votre <strong>${device}</strong> a été clôturé.</p><p>Si vous avez des questions ou souhaitez ouvrir un nouveau dossier, n'hésitez pas à nous contacter.</p><p>L'équipe RepairFlow</p>`;\n    break;\n\n  default:\n    sms_content   = `Mise a jour de votre dossier RepairFlow. Suivez l'avancement : ${tracking_url}`;\n    email_subject = 'Mise à jour de votre dossier';\n    email_html    = `<p>Bonjour ${contact_name},</p><p>Votre dossier a été mis à jour. Consultez votre espace de suivi :</p><p><a href=\"${tracking_url}\">${tracking_url}</a></p><p>L'équipe RepairFlow</p>`;\n}\n\nreturn [{\n  json: {\n    ...data,\n    tracking_url,\n    review_url,\n    sms_content,\n    email_subject,\n    email_html\n  }\n}];"
+      }
+    },
+
+    {
+      "id": "node-send-sms",
+      "name": "Send SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1920, 180],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.brevo.com/v3/transactionalSMS/sms",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "api-key",      "value": "={{ $env.BREVO_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sender: 'RepairFlow', recipient: $json.contact_phone, content: $json.sms_content }) }}",
+        "options": {
+          "response": { "response": { "responseFormat": "json" } }
+        }
+      }
+    },
+
+    {
+      "id": "node-switch-email",
+      "name": "Has Email?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [2160, 180],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  {
+                    "id": "cond-has-email",
+                    "leftValue": "={{ $('Build Notification Content').first().json.contact_email }}",
+                    "rightValue": "",
+                    "operator": {
+                      "name": "filter.operator.notEmpty",
+                      "type": "string",
+                      "operation": "notEmpty"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputIndex": 0,
+              "renameOutput": true,
+              "outputKey": "has_email"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": 1
+        }
+      }
+    },
+
+    {
+      "id": "node-send-email",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2400, 80],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.brevo.com/v3/smtp/email",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "api-key",      "value": "={{ $env.BREVO_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sender: { name: 'RepairFlow', email: 'noreply@repairflow.fr' }, to: [{ email: $('Build Notification Content').first().json.contact_email, name: $('Build Notification Content').first().json.contact_name }], subject: $('Build Notification Content').first().json.email_subject, htmlContent: $('Build Notification Content').first().json.email_html }) }}",
+        "options": {
+          "response": { "response": { "responseFormat": "json" } }
+        }
+      }
+    },
+
+    {
+      "id": "node-build-response",
+      "name": "Build Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, 180],
+      "parameters": {
+        "jsCode": "// Récupère les données enrichies depuis Build Notification Content\nconst data = $('Build Notification Content').first().json;\n\n// L'email a été envoyé si contact_email était renseigné\nconst notifications_sent = ['sms'];\nif (data.contact_email) {\n  notifications_sent.push('email');\n}\n\nreturn [{\n  json: {\n    success:            true,\n    ticket_id:          data.ticket_id,\n    old_status:         data.current_status,\n    new_status:         data.new_status,\n    notifications_sent\n  }\n}];"
+      }
+    },
+
+    {
+      "id": "node-respond-200",
+      "name": "Return Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2880, 180],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={{ JSON.stringify($json) }}"
+      }
+    },
+
+    {
+      "id": "node-error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 560],
+      "parameters": {}
+    },
+
+    {
+      "id": "node-respond-500",
+      "name": "Return Internal Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [240, 560],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 500,
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'internal_error', detail: $json.execution?.error?.message ?? 'Une erreur inattendue est survenue.' }) }}"
+      }
+    }
+
+  ],
+
+  "connections": {
+
+    "Receive Status Update": {
+      "main": [
+        [{ "node": "Validate Payload", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Validate Payload": {
+      "main": [
+        [{ "node": "Payload Valid?", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Payload Valid?": {
+      "main": [
+        [{ "node": "Fetch Ticket + Contact",   "type": "main", "index": 0 }],
+        [{ "node": "Return 400",               "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Fetch Ticket + Contact": {
+      "main": [
+        [{ "node": "Check Ticket + Validate Transition", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Check Ticket + Validate Transition": {
+      "main": [
+        [{ "node": "Error Code?", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Error Code?": {
+      "main": [
+        [{ "node": "Return 404",           "type": "main", "index": 0 }],
+        [{ "node": "Return 409",           "type": "main", "index": 0 }],
+        [{ "node": "Update Ticket Status", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Update Ticket Status": {
+      "main": [
+        [{ "node": "Build Notification Content", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Build Notification Content": {
+      "main": [
+        [{ "node": "Send SMS", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Send SMS": {
+      "main": [
+        [{ "node": "Has Email?", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Has Email?": {
+      "main": [
+        [{ "node": "Send Email",     "type": "main", "index": 0 }],
+        [{ "node": "Build Response", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Send Email": {
+      "main": [
+        [{ "node": "Build Response", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Build Response": {
+      "main": [
+        [{ "node": "Return Success", "type": "main", "index": 0 }]
+      ]
+    },
+
+    "Error Trigger": {
+      "main": [
+        [{ "node": "Return Internal Error", "type": "main", "index": 0 }]
+      ]
+    }
+
+  }
+}
