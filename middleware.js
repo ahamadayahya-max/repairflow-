@@ -16,6 +16,7 @@ const ALWAYS_ALLOWED = [
   '/maintenance',
   '/api/maintenance-unlock',   // route pour poser le cookie
   '/api/auth',                 // reset password
+  '/api/demo-request',         // formulaire de démo (public)
   '/track/',                   // page de suivi public (ancienne URL)
   '/suivi/',                   // page de suivi public (URL QR codes)
 ]

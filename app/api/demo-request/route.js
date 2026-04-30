@@ -59,8 +59,8 @@ export async function POST(request) {
       )
     }
 
-    // Notification email à l'administrateur — non bloquant
-    sendEmail({
+    // Notification email à l'administrateur — attendu pour détecter les erreurs
+    const emailResult = await sendEmail({
       to:      ADMIN_EMAIL,
       subject: `🔔 Nouvelle demande de démo — ${nom_atelier}`,
       html: `
@@ -78,7 +78,11 @@ export async function POST(request) {
           </p>
         </div>
       `,
-    }).catch(err => console.error('[demo-request] Erreur envoi email admin:', err.message))
+    })
+
+    if (!emailResult?.success) {
+      console.error('[demo-request] Échec envoi email admin:', emailResult?.error)
+    }
 
     return NextResponse.json({ success: true, message: 'Demande envoyée avec succès.' })
   } catch (err) {
