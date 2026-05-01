@@ -140,6 +140,29 @@ export default function BienvenueePage() {
 
         // Reprend à l'étape sauvegardée
         if (shop.onboarding_step >= 2) setStep(shop.onboarding_step)
+      } else {
+        // Aucun shop trouvé — on le crée maintenant pour que la suite fonctionne
+        const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+        const shopName = user.user_metadata?.shop_name ?? ''
+        const { data: newShop } = await supabase
+          .from('shops')
+          .insert({
+            owner_id:             user.id,
+            name:                 shopName || 'Mon Atelier',
+            plan:                 'starter',
+            subscription_status:  'trial',
+            trial_ends_at:        trialEnd,
+            onboarding_completed: false,
+            onboarding_step:      0,
+          })
+          .select('id, name')
+          .single()
+
+        if (newShop) {
+          setShopId(newShop.id)
+          setShopName(newShop.name)
+          setForm2(f => ({ ...f, name: newShop.name }))
+        }
       }
 
       // Prénom depuis les métadonnées Auth
@@ -151,7 +174,8 @@ export default function BienvenueePage() {
 
   // ── Sauvegarde de l'étape courante ──
   async function saveStep(nextStep, extra = {}) {
-    if (!shopId) return
+    // Si shopId toujours absent, on navigue quand même localement
+    if (!shopId) { setStep(nextStep); return }
     await supabase
       .from('shops')
       .update({ onboarding_step: nextStep, ...extra })
