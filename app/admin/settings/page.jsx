@@ -7,7 +7,7 @@ import { getSupabaseClient } from '@/lib/supabase/client'
 import {
   Settings, Save, Loader2, CheckCircle2, Store,
   Phone, MapPin, Clock, AlertCircle, Mail, Link2,
-  ImagePlus, X,
+  ImagePlus, X, Printer,
 } from 'lucide-react'
 
 const inputClass = `w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white
@@ -402,6 +402,46 @@ export default function SettingsPage() {
               : <><Save className="w-4 h-4" /> Enregistrer les modifications</>
             }
           </button>
+        </div>
+      </div>
+
+      {/* ── Section imprimante thermique ── */}
+      <div className="bg-[#111118] rounded-xl border border-white/10 p-6">
+        <h2 className="text-white font-semibold text-sm mb-1 flex items-center gap-2">
+          <Printer className="w-4 h-4 text-amber-400" />
+          Imprimante thermique 58mm
+        </h2>
+        <p className="text-xs text-gray-500 mb-4">
+          Configuration Excelvan USB (ou compatible) pour l&apos;impression des bons de dépôt.
+        </p>
+
+        {/* Instructions de configuration — à réaliser une seule fois */}
+        <div className="text-xs text-gray-400 bg-white/3 border border-white/10 rounded-lg p-4">
+          <div className="font-semibold text-gray-300 mb-2 flex items-center gap-1.5">
+            ⚙️ Configuration requise une seule fois
+          </div>
+          <ol className="space-y-1.5 list-decimal list-inside text-gray-500">
+            <li>Installez le driver Excelvan (CD fourni ou site fabricant)</li>
+            <li>Branchez l&apos;imprimante en USB et attendez l&apos;installation automatique</li>
+            <li>
+              Définissez-la comme imprimante par défaut :<br />
+              <span className="font-mono text-xs text-gray-600">
+                Panneau de configuration → Périphériques → Clic droit Excelvan → Définir par défaut
+              </span>
+            </li>
+            <li>Chargez le papier thermique 58mm (face brillante vers le haut)</li>
+            <li>
+              Autorisez les popups dans Chrome :<br />
+              <span className="font-mono text-xs text-gray-600">
+                Paramètres Chrome → Confidentialité → Fenêtres pop-up → Autoriser ce site
+              </span>
+            </li>
+          </ol>
+          <div className="mt-3 pt-3 border-t border-white/5 text-gray-600">
+            Le bouton <span className="font-semibold text-gray-400">🖨️ Ticket thermique</span> apparaît
+            sur chaque ticket et dans la modale après création.
+            La fenêtre d&apos;impression s&apos;ouvre automatiquement — cliquez OK pour imprimer.
+          </div>
         </div>
       </div>
 

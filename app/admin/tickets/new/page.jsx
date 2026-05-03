@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSupabaseClient } from '@/lib/supabase/client'
+import { printThermalTicket } from '@/lib/utils/thermalPrint'
 import {
   ArrowLeft, Loader2, CheckCircle2, Search,
   Smartphone, ExternalLink, Plus, Trash2, Euro,
@@ -82,9 +83,11 @@ export default function NewTicketPage() {
   const [submitting,    setSubmitting]    = useState(false)
   const [error,         setError]         = useState(null)
   const [ticketId,      setTicketId]      = useState(null)
-  const [createdTicket, setCreatedTicket] = useState(null)
-  const [shopData,      setShopData]      = useState(null)
-  const [printLoading,  setPrintLoading]  = useState(false)
+  const [createdTicket,   setCreatedTicket]   = useState(null)
+  const [shopData,        setShopData]        = useState(null)
+  const [printLoading,    setPrintLoading]    = useState(false)
+  const [showPrintModal,  setShowPrintModal]  = useState(false)
+  const [thermalPrinting, setThermalPrinting] = useState(false)
 
   // ── Recherche d'un client existant par téléphone ──
   async function handlePhoneSearch() {
@@ -301,7 +304,7 @@ export default function NewTicketPage() {
       }
 
       setTicketId(ticket.id)
-      // Construit un objet complet pour la génération du bon de dépôt PDF
+      // Construit un objet complet pour la génération du bon de dépôt PDF et thermique
       setCreatedTicket({
         ...ticketPayload,
         id:              ticket.id,
@@ -315,6 +318,8 @@ export default function NewTicketPage() {
         },
       })
       setStep('success')
+      // Propose l'impression thermique immédiate via une modale
+      setShowPrintModal(true)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -403,6 +408,51 @@ export default function NewTicketPage() {
   if (step === 'success') {
     return (
       <div className="max-w-md mx-auto text-center py-16">
+
+      {/* ── Modale d'impression thermique immédiate ── */}
+      {showPrintModal && createdTicket && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#111118] border border-white/10 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center">
+            <div className="text-4xl mb-3">🖨️</div>
+            <h2 className="text-white text-lg font-bold mb-1">Ticket créé !</h2>
+            <p className="text-gray-400 text-sm mb-5">
+              Imprimer le bon de dépôt sur l&apos;imprimante thermique maintenant ?
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                disabled={thermalPrinting}
+                onClick={async () => {
+                  setThermalPrinting(true)
+                  try {
+                    await printThermalTicket(createdTicket, shopData ?? {})
+                  } finally {
+                    setThermalPrinting(false)
+                    setShowPrintModal(false)
+                  }
+                }}
+                className="w-full flex items-center justify-center gap-2
+                           bg-gray-800 hover:bg-gray-700 text-white font-bold
+                           py-3 rounded-xl transition-colors disabled:opacity-50"
+              >
+                {thermalPrinting
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Impression…</>
+                  : '🖨️ Imprimer maintenant'
+                }
+              </button>
+              <button
+                onClick={() => setShowPrintModal(false)}
+                disabled={thermalPrinting}
+                className="w-full bg-white/5 hover:bg-white/10 border border-white/10
+                           text-gray-400 font-medium py-3 rounded-xl transition-colors
+                           disabled:opacity-50"
+              >
+                Plus tard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
         <div className="w-16 h-16 bg-green-400/10 rounded-full flex items-center justify-center mx-auto mb-5">
           <CheckCircle2 className="w-8 h-8 text-green-400" />
         </div>

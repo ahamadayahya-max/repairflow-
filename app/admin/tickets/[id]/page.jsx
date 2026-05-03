@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getSupabaseClient } from '@/lib/supabase/client'
+import { printThermalTicket } from '@/lib/utils/thermalPrint'
 import AIAssistant from '@/components/admin/AIAssistant'
 import PartSearchDropdown from '@/components/admin/PartSearchDropdown'
 import BrandDropdown from '@/components/admin/BrandDropdown'
@@ -134,7 +135,9 @@ export default function TicketDetailPage() {
   const [shop, setShop] = useState({})
 
   // Génération PDF à la demande
-  const [pdfGenerating, setPdfGenerating] = useState(false)
+  const [pdfGenerating,   setPdfGenerating]   = useState(false)
+  // Impression thermique en cours
+  const [thermalPrinting, setThermalPrinting] = useState(false)
 
   // Édition inline marque / modèle
   const [editingDevice, setEditingDevice] = useState(false)
@@ -1169,9 +1172,29 @@ export default function TicketDetailPage() {
               Bon de dépôt
             </h3>
             <div className="flex gap-2 flex-wrap">
+              {/* Impression thermique 58mm — priorité si imprimante thermique branchée */}
+              <button
+                onClick={async () => {
+                  setThermalPrinting(true)
+                  try {
+                    await printThermalTicket(ticket, shop)
+                  } finally {
+                    setThermalPrinting(false)
+                  }
+                }}
+                disabled={thermalPrinting || pdfGenerating}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold
+                           bg-gray-800 hover:bg-gray-700 text-white transition-colors
+                           disabled:opacity-50 disabled:cursor-wait"
+              >
+                {thermalPrinting
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Impression…</>
+                  : <>🖨️ Ticket thermique</>
+                }
+              </button>
               <button
                 onClick={handlePrintReceipt}
-                disabled={pdfGenerating}
+                disabled={pdfGenerating || thermalPrinting}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold
                            bg-amber-500 hover:bg-amber-400 text-white transition-colors
                            disabled:opacity-50 disabled:cursor-wait"
@@ -1183,7 +1206,7 @@ export default function TicketDetailPage() {
               </button>
               <button
                 onClick={handleDownloadReceipt}
-                disabled={pdfGenerating}
+                disabled={pdfGenerating || thermalPrinting}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold
                            bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300
                            transition-colors disabled:opacity-50 disabled:cursor-wait"
