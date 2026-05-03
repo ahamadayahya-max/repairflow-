@@ -22,6 +22,7 @@
     "lucide-react": "^0.400.0",
     "next": "^15.5.15",
     "nodemailer": "^8.0.5",
+    "qrcode": "^1.5.4",
     "qrcode.react": "^4.2.0",
     "react": "^18",
     "react-dom": "^18"

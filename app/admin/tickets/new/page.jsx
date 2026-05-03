@@ -79,9 +79,12 @@ export default function NewTicketPage() {
   // Shop ID chargé lors de la soumission — on en a besoin pour PartSearchDropdown
   const [shopId, setShopId] = useState(null)
 
-  const [submitting, setSubmitting] = useState(false)
-  const [error,      setError]      = useState(null)
-  const [ticketId,   setTicketId]   = useState(null)
+  const [submitting,    setSubmitting]    = useState(false)
+  const [error,         setError]         = useState(null)
+  const [ticketId,      setTicketId]      = useState(null)
+  const [createdTicket, setCreatedTicket] = useState(null)
+  const [shopData,      setShopData]      = useState(null)
+  const [printLoading,  setPrintLoading]  = useState(false)
 
   // ── Recherche d'un client existant par téléphone ──
   async function handlePhoneSearch() {
@@ -208,9 +211,10 @@ export default function NewTicketPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       const { data: shop }     = await supabase
-        .from('shops').select('id').eq('owner_id', user.id).single()
+        .from('shops').select('id, name, phone, address, email, logo_url').eq('owner_id', user.id).single()
 
       if (!shop) throw new Error('Atelier introuvable.')
+      setShopData(shop)
 
       // Crée ou réutilise le client
       let finalClientId = clientId
@@ -264,7 +268,7 @@ export default function NewTicketPage() {
       const { data: ticket, error: tErr } = await supabase
         .from('tickets')
         .insert(ticketPayload)
-        .select('id')
+        .select('id, tracking_token')
         .single()
 
       if (tErr) throw new Error('Impossible de créer le ticket : ' + tErr.message)
@@ -297,11 +301,84 @@ export default function NewTicketPage() {
       }
 
       setTicketId(ticket.id)
+      // Construit un objet complet pour la génération du bon de dépôt PDF
+      setCreatedTicket({
+        ...ticketPayload,
+        id:              ticket.id,
+        tracking_token:  ticket.tracking_token,
+        clients: {
+          full_name:  fullName.trim(),
+          first_name: fullName.trim().split(' ')[0] ?? '',
+          last_name:  fullName.trim().split(' ').slice(1).join(' ') || null,
+          phone:      phone.trim(),
+          email:      email.trim() || null,
+        },
+      })
       setStep('success')
     } catch (err) {
       setError(err.message)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  // ── Génère et imprime le bon de dépôt PDF ──
+  async function handlePrintBon() {
+    if (!createdTicket) return
+    setPrintLoading(true)
+    try {
+      const [{ TicketReceiptPDF }, { pdf }, { createElement }, QRCode] = await Promise.all([
+        import('@/components/admin/pdf/TicketReceiptPDF'),
+        import('@react-pdf/renderer'),
+        import('react'),
+        import('qrcode').then(m => m.default),
+      ])
+      const trackingUrl = `https://repairflow-app.vercel.app/suivi/${createdTicket.tracking_token}`
+      const qrDataUrl   = await QRCode.toDataURL(trackingUrl, { width: 200, margin: 1 })
+      const blob        = await pdf(
+        createElement(TicketReceiptPDF, { ticket: createdTicket, shop: shopData ?? {}, qrCodeDataUrl: qrDataUrl })
+      ).toBlob()
+      const url = URL.createObjectURL(blob)
+      const win = window.open(url, '_blank')
+      if (win) {
+        win.onload = () => {
+          win.print()
+          setTimeout(() => URL.revokeObjectURL(url), 5000)
+        }
+      }
+    } catch (err) {
+      console.error('[impression bon]', err)
+    } finally {
+      setPrintLoading(false)
+    }
+  }
+
+  // ── Télécharge le bon de dépôt en PDF ──
+  async function handleDownloadBon() {
+    if (!createdTicket) return
+    setPrintLoading(true)
+    try {
+      const [{ TicketReceiptPDF }, { pdf }, { createElement }, QRCode] = await Promise.all([
+        import('@/components/admin/pdf/TicketReceiptPDF'),
+        import('@react-pdf/renderer'),
+        import('react'),
+        import('qrcode').then(m => m.default),
+      ])
+      const trackingUrl = `https://repairflow-app.vercel.app/suivi/${createdTicket.tracking_token}`
+      const qrDataUrl   = await QRCode.toDataURL(trackingUrl, { width: 200, margin: 1 })
+      const blob        = await pdf(
+        createElement(TicketReceiptPDF, { ticket: createdTicket, shop: shopData ?? {}, qrCodeDataUrl: qrDataUrl })
+      ).toBlob()
+      const url  = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href  = url
+      link.download = `bon-depot-${createdTicket.id?.slice(0, 8) ?? 'ticket'}.pdf`
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 3000)
+    } catch (err) {
+      console.error('[téléchargement bon]', err)
+    } finally {
+      setPrintLoading(false)
     }
   }
 
@@ -334,7 +411,39 @@ export default function NewTicketPage() {
           Le client <strong className="text-white">{fullName}</strong> a été enregistré
           et son ticket de réparation est ouvert.
         </p>
-        <div className="flex gap-3 justify-center">
+
+        {/* Bon de dépôt */}
+        <div className="bg-[#111118] border border-white/10 rounded-xl p-4 mb-6 text-left">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">
+            Bon de dépôt
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={handlePrintBon}
+              disabled={printLoading}
+              className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
+            >
+              {printLoading
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <span>🖨️</span>
+              }
+              Imprimer le bon
+            </button>
+            <button
+              onClick={handleDownloadBon}
+              disabled={printLoading}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 disabled:opacity-50 text-gray-300 text-sm font-semibold rounded-lg transition-colors"
+            >
+              {printLoading
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <span>⬇️</span>
+              }
+              Télécharger PDF
+            </button>
+          </div>
+        </div>
+
+        <div className="flex gap-3 justify-center flex-wrap">
           <Link
             href={`/admin/tickets/${ticketId}`}
             className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-white text-sm font-semibold rounded-lg transition-colors"

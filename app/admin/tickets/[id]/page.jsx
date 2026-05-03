@@ -502,6 +502,66 @@ export default function TicketDetailPage() {
     }
   }, [ticket, shop, ticketParts])
 
+  // Impression du bon de dépôt client (ouvre le dialogue d'impression natif)
+  const handlePrintReceipt = useCallback(async () => {
+    setPdfGenerating(true)
+    try {
+      const [{ TicketReceiptPDF }, { pdf }, { createElement }, QRCode] = await Promise.all([
+        import('@/components/admin/pdf/TicketReceiptPDF'),
+        import('@react-pdf/renderer'),
+        import('react'),
+        import('qrcode').then(m => m.default),
+      ])
+      const trackingUrl = `https://repairflow-app.vercel.app/suivi/${ticket.tracking_token}`
+      const qrDataUrl   = await QRCode.toDataURL(trackingUrl, { width: 200, margin: 1 })
+      const blob = await pdf(
+        createElement(TicketReceiptPDF, { ticket, shop, qrCodeDataUrl: qrDataUrl })
+      ).toBlob()
+      const url = URL.createObjectURL(blob)
+      const win = window.open(url, '_blank')
+      if (win) {
+        win.onload = () => {
+          win.print()
+          setTimeout(() => URL.revokeObjectURL(url), 5000)
+        }
+      }
+    } catch (err) {
+      setUpdateMsg({ type: 'error', text: 'Erreur impression bon de dépôt : ' + err.message })
+      setTimeout(() => setUpdateMsg(null), 4000)
+    } finally {
+      setPdfGenerating(false)
+    }
+  }, [ticket, shop])
+
+  // Téléchargement du bon de dépôt en PDF
+  const handleDownloadReceipt = useCallback(async () => {
+    setPdfGenerating(true)
+    try {
+      const [{ TicketReceiptPDF }, { pdf }, { createElement }, QRCode] = await Promise.all([
+        import('@/components/admin/pdf/TicketReceiptPDF'),
+        import('@react-pdf/renderer'),
+        import('react'),
+        import('qrcode').then(m => m.default),
+      ])
+      const trackingUrl = `https://repairflow-app.vercel.app/suivi/${ticket.tracking_token}`
+      const qrDataUrl   = await QRCode.toDataURL(trackingUrl, { width: 200, margin: 1 })
+      const blob = await pdf(
+        createElement(TicketReceiptPDF, { ticket, shop, qrCodeDataUrl: qrDataUrl })
+      ).toBlob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `bon-depot-RF-${(ticket.id ?? '').slice(0, 8).toUpperCase()}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setUpdateMsg({ type: 'error', text: 'Erreur téléchargement bon de dépôt : ' + err.message })
+      setTimeout(() => setUpdateMsg(null), 4000)
+    } finally {
+      setPdfGenerating(false)
+    }
+  }, [ticket, shop])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -1101,6 +1161,40 @@ export default function TicketDetailPage() {
               )}
             </div>
           )}
+
+          {/* ── Bon de dépôt ── */}
+          <div className="bg-[#111118] rounded-xl border border-white/10 p-4">
+            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+              <Printer className="w-3.5 h-3.5" />
+              Bon de dépôt
+            </h3>
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={handlePrintReceipt}
+                disabled={pdfGenerating}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold
+                           bg-amber-500 hover:bg-amber-400 text-white transition-colors
+                           disabled:opacity-50 disabled:cursor-wait"
+              >
+                {pdfGenerating
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Génération…</>
+                  : <><Printer className="w-3.5 h-3.5" /> Imprimer le bon</>
+                }
+              </button>
+              <button
+                onClick={handleDownloadReceipt}
+                disabled={pdfGenerating}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold
+                           bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300
+                           transition-colors disabled:opacity-50 disabled:cursor-wait"
+              >
+                {pdfGenerating
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Génération…</>
+                  : <><Download className="w-3.5 h-3.5" /> Télécharger PDF</>
+                }
+              </button>
+            </div>
+          </div>
 
           {/* ── Facture PDF ── */}
           <div className="bg-[#111118] rounded-xl border border-white/10 p-4">
