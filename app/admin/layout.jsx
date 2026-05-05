@@ -7,7 +7,7 @@ import { getSupabaseClient } from '@/lib/supabase/client'
 import {
   Wrench, LayoutDashboard, Ticket, LogOut, Loader2, Menu, X,
   Users, Package, Settings, LayoutGrid, FileText, Receipt, BarChart3, CalendarDays,
-  Zap, Leaf,
+  Zap, Leaf, ClipboardCheck,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -23,8 +23,9 @@ const NAV_ITEMS = [
   { href: '/admin/devis',         label: 'Devis',             icon: FileText       },
   { href: '/admin/factures',      label: 'Factures',          icon: Receipt        },
   { href: '/admin/comptabilite',  label: 'Comptabilité',      icon: BarChart3      },
-  { href: '/admin/qualirepar',    label: 'QualiRépar',        icon: Leaf           },
-  { href: '/admin/settings',      label: 'Paramètres',        icon: Settings       },
+  { href: '/admin/qualirepar',            label: 'QualiRépar',        icon: Leaf           },
+  { href: '/admin/qualirepar/conformite', label: 'Conformité label',   icon: ClipboardCheck, sub: true },
+  { href: '/admin/settings',              label: 'Paramètres',        icon: Settings       },
 ]
 
 /**
@@ -145,7 +146,7 @@ export default function AdminLayout({ children }) {
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+          {NAV_ITEMS.map(({ href, label, icon: Icon, sub }) => {
             const active = pathname === href || (href !== '/admin' && href !== '/admin/overview' && pathname.startsWith(href))
             return (
               <Link
@@ -153,14 +154,17 @@ export default function AdminLayout({ children }) {
                 href={href}
                 onClick={() => setSidebarOpen(false)}
                 className={`
-                  flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                  flex items-center gap-3 rounded-lg text-sm font-medium transition-colors
+                  ${sub ? 'ml-4 px-3 py-2' : 'px-3 py-2.5'}
                   ${active
                     ? 'bg-amber-500/15 text-amber-300 border border-amber-500/20'
+                    : sub
+                    ? 'text-gray-600 hover:text-gray-300 hover:bg-white/5'
                     : 'text-gray-400 hover:text-white hover:bg-white/5'
                   }
                 `}
               >
-                <Icon className="w-4 h-4 flex-shrink-0" />
+                <Icon className={`flex-shrink-0 ${sub ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
                 {label}
               </Link>
             )

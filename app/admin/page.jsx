@@ -8,7 +8,7 @@ import { getSupabaseClient } from '@/lib/supabase/client'
 import {
   Clock, Wrench, CheckCircle2, Truck, TrendingUp,
   Ticket, Package, AlertTriangle, ArrowRight, Loader2,
-  Plus
+  Plus, Leaf,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -104,6 +104,7 @@ export default function DashboardPage() {
   const [recentTickets,  setRecentTickets]  = useState([])
   const [weeklyData,     setWeeklyData]     = useState([])
   const [lowStock,       setLowStock]       = useState([])
+  const [qrScore,        setQrScore]        = useState(null)
 
   useEffect(() => {
     async function load() {
@@ -180,6 +181,10 @@ export default function DashboardPage() {
         reference: p.sku,
         stock:     p.qty_stock,
       })))
+
+      // ── Score QualiRépar ────────────────────────────────────────────────
+      const { data: qrData } = await supabase.rpc('get_qualirepar_compliance_score')
+      setQrScore(qrData)
 
       setLoading(false)
     }
@@ -342,6 +347,42 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* ── Widget QualiRépar ── */}
+      <Link
+        href="/admin/qualirepar/conformite"
+        className="block bg-[#111118] border border-white/10 hover:border-green-500/30
+                   rounded-xl p-5 transition-colors group"
+      >
+        <div className="flex items-center justify-between gap-4">
+          {/* Info gauche */}
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-green-500/10 flex items-center justify-center">
+              <Leaf className="w-4.5 h-4.5 text-green-400" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">QualiRépar — Conformité label</p>
+              <p className="text-xs text-gray-500 mt-0.5">Score de conformité aux critères qualité</p>
+            </div>
+          </div>
+          {/* Score + badge */}
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <div className="text-right">
+              <p className="text-2xl font-bold text-amber-400">
+                {qrScore?.score_global ?? 0}
+                <span className="text-sm text-gray-600 font-normal">/100</span>
+              </p>
+            </div>
+            <span className={`text-xs px-2.5 py-1 rounded-full font-semibold
+              ${qrScore?.eligible_label
+                ? 'bg-green-500/15 text-green-400'
+                : 'bg-amber-500/15 text-amber-400'}`}>
+              {qrScore?.eligible_label ? '✅ Éligible' : '⚠️ En cours'}
+            </span>
+            <ArrowRight className="w-4 h-4 text-gray-700 group-hover:text-amber-400 transition-colors" />
+          </div>
+        </div>
+      </Link>
 
       {/* Tickets récents */}
       <div className="bg-[#111118] rounded-xl border border-white/10">
