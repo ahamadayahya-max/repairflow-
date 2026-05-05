@@ -113,7 +113,17 @@
       "Bash(git --version)",
       "Bash(git config *)",
       "PowerShell(git config --global user.name)",
-      "PowerShell(git config --global user.email)"
+      "PowerShell(git config --global user.email)",
+      "Bash(node -e \"require\\('qrcode'\\)\")",
+      "Bash(node -e \"require\\('qrcode'\\); console.log\\('OK'\\)\")",
+      "Bash(git commit -m ' *)",
+      "Bash(node -e \"require\\('qrcode'\\); console.log\\('qrcode OK'\\)\")",
+      "Bash(git push *)",
+      "Bash(Get-Printer)",
+      "Bash(Select-Object Name, DriverName, PortName)",
+      "Bash(Format-Table -AutoSize)",
+      "PowerShell(Get-PnpDevice | Where-Object {$_.Status -eq \"Unknown\" -or $_.Status -eq \"Error\"} | Select-Object Status, Class, FriendlyName, InstanceId | Format-Table -AutoSize)",
+      "Bash(git commit *)"
     ]
   }
 }

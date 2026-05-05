@@ -4,10 +4,11 @@ export const dynamic = 'force-dynamic'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { getSupabaseClient } from '@/lib/supabase/client'
 import {
   Users, Search, Phone, Mail, Ticket,
-  Loader2, ChevronRight
+  Loader2, ChevronRight, UserRound,
 } from 'lucide-react'
 
 /**
@@ -109,7 +110,7 @@ export default function ClientsPage() {
               return (
                 <div
                   key={client.id}
-                  className="flex items-center justify-between px-5 py-4 hover:bg-white/2 transition-colors"
+                  className="flex items-center justify-between px-5 py-4 hover:bg-white/3 transition-colors"
                 >
                   {/* Infos client */}
                   <div className="flex items-center gap-4 min-w-0">
@@ -150,17 +151,28 @@ export default function ClientsPage() {
                       )}
                     </div>
 
-                    {/* Bouton voir tickets */}
-                    <button
-                      onClick={() => router.push(`/admin/tickets?client=${client.id}`)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-                                 bg-white/5 border border-white/10 text-gray-400
-                                 hover:bg-amber-500/10 hover:border-amber-500/30 hover:text-amber-300
-                                 transition-colors"
-                    >
-                      Voir les tickets
-                      <ChevronRight className="w-3 h-3" />
-                    </button>
+                    {/* Boutons action */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => router.push(`/admin/tickets?client=${client.id}`)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                                   bg-white/5 border border-white/10 text-gray-400
+                                   hover:bg-white/10 hover:text-gray-200 transition-colors"
+                      >
+                        <Ticket className="w-3 h-3" />
+                        <span className="hidden sm:inline">Tickets</span>
+                      </button>
+                      <Link
+                        href={`/admin/clients/${client.id}`}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                                   bg-amber-500/10 border border-amber-500/20 text-amber-400
+                                   hover:bg-amber-500/20 transition-colors"
+                      >
+                        <UserRound className="w-3 h-3" />
+                        <span className="hidden sm:inline">Fiche</span>
+                        <ChevronRight className="w-3 h-3" />
+                      </Link>
+                    </div>
                   </div>
                 </div>
               )
