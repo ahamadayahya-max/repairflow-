@@ -8,7 +8,7 @@ import Link from 'next/link'
 import { getSupabaseClient } from '@/lib/supabase/client'
 import {
   Users, Search, Phone, Mail, Ticket,
-  Loader2, ChevronRight, UserRound,
+  Loader2, ChevronRight, UserRound, Trash2,
 } from 'lucide-react'
 
 /**
@@ -21,7 +21,26 @@ export default function ClientsPage() {
   const [shopId,  setShopId]  = useState(null)
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
-  const [search,  setSearch]  = useState('')
+  const [search,     setSearch]     = useState('')
+  const [confirmId,  setConfirmId]  = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
+
+  async function handleDelete(clientId) {
+    setDeletingId(clientId)
+    try {
+      const { error } = await supabase
+        .from('clients')
+        .delete()
+        .eq('id', clientId)
+      if (error) throw new Error(error.message)
+      setClients(prev => prev.filter(c => c.id !== clientId))
+    } catch (err) {
+      alert('Erreur : ' + err.message)
+    } finally {
+      setDeletingId(null)
+      setConfirmId(null)
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -172,6 +191,39 @@ export default function ClientsPage() {
                         <span className="hidden sm:inline">Fiche</span>
                         <ChevronRight className="w-3 h-3" />
                       </Link>
+
+                      {/* Suppression avec confirmation inline */}
+                      {confirmId === client.id ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleDelete(client.id)}
+                            disabled={deletingId === client.id}
+                            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-500
+                                       hover:bg-red-400 text-white transition-colors disabled:opacity-50"
+                          >
+                            {deletingId === client.id
+                              ? <Loader2 className="w-3 h-3 animate-spin" />
+                              : 'Confirmer'
+                            }
+                          </button>
+                          <button
+                            onClick={() => setConfirmId(null)}
+                            className="px-2 py-1.5 rounded-lg text-xs text-gray-500
+                                       hover:text-white hover:bg-white/5 transition-colors"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmId(client.id)}
+                          title="Supprimer ce client"
+                          className="p-1.5 rounded-lg text-gray-600 hover:text-red-400
+                                     hover:bg-red-400/10 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
