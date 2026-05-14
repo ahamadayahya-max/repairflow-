@@ -7,8 +7,9 @@ import { getSupabaseClient } from '@/lib/supabase/client'
 import {
   Settings, Save, Loader2, CheckCircle2, Store,
   Phone, MapPin, Clock, AlertCircle, Mail, Link2,
-  ImagePlus, X, Printer,
+  ImagePlus, X, Printer, Leaf, Eye, EyeOff,
 } from 'lucide-react'
+import { ThemeSelector } from '@/components/ThemeToggle'
 
 const inputClass = `w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white
   placeholder-gray-600 focus:outline-none focus:border-amber-500/50 transition-colors`
@@ -29,6 +30,14 @@ export default function SettingsPage() {
   const [saving,      setSaving]      = useState(false)
   const [uploading,   setUploading]   = useState(false)
   const [msg,         setMsg]         = useState(null)
+
+  // ── QualiRépar ──
+  const [qrActive,      setQrActive]      = useState(false)
+  const [qrApiKey,      setQrApiKey]      = useState('')
+  const [qrLabelNum,    setQrLabelNum]    = useState('')
+  const [qrSaving,      setQrSaving]      = useState(false)
+  const [qrMsg,         setQrMsg]         = useState(null)
+  const [showApiKey,    setShowApiKey]    = useState(false)
 
   const [form, setForm] = useState({
     name:     '',
@@ -63,6 +72,19 @@ export default function SettingsPage() {
           logo_url: shop.logo_url ?? '',
           slug:     shop.slug     ?? '',
         })
+
+        // Charge la config QualiRépar de l'atelier
+        const { data: qrConfig } = await supabase
+          .from('qualirepar_shop_config')
+          .select('active, agoraplus_key_ref, qualirepar_label_num')
+          .eq('shop_id', shop.id)
+          .maybeSingle()
+
+        if (qrConfig) {
+          setQrActive(qrConfig.active ?? false)
+          setQrApiKey(qrConfig.agoraplus_key_ref ?? '')
+          setQrLabelNum(qrConfig.qualirepar_label_num ?? '')
+        }
       }
       // Pas d'alerte si shop absent — l'utilisateur peut le créer via ce formulaire
       setLoading(false)
@@ -174,6 +196,32 @@ export default function SettingsPage() {
   function showMsg(type, text) {
     setMsg({ type, text })
     setTimeout(() => setMsg(null), 5000)
+  }
+
+  // ── Sauvegarde de la config QualiRépar ──
+  async function handleSaveQR() {
+    if (!shopId) return
+    setQrSaving(true)
+    setQrMsg(null)
+    try {
+      const { error } = await supabase
+        .from('qualirepar_shop_config')
+        .upsert({
+          shop_id:               shopId,
+          active:                qrActive,
+          agoraplus_key_ref:     qrApiKey.trim() || null,
+          qualirepar_label_num:  qrLabelNum.trim() || null,
+          updated_at:            new Date().toISOString(),
+        }, { onConflict: 'shop_id' })
+
+      if (error) throw error
+      setQrMsg({ type: 'success', text: 'Configuration QualiRépar enregistrée ✅' })
+      setTimeout(() => setQrMsg(null), 5000)
+    } catch (err) {
+      setQrMsg({ type: 'error', text: err.message })
+    } finally {
+      setQrSaving(false)
+    }
   }
 
   function field(key, value) {
@@ -443,6 +491,122 @@ export default function SettingsPage() {
             La fenêtre d&apos;impression s&apos;ouvre automatiquement — cliquez OK pour imprimer.
           </div>
         </div>
+      </div>
+
+      {/* ── Section QualiRépar ── */}
+      <div className="bg-[#111118] rounded-xl border border-white/10 p-6 space-y-5">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-white font-semibold text-sm flex items-center gap-2">
+            <Leaf className="w-4 h-4 text-green-400" />
+            Bonus QualiRépar
+          </h2>
+          {/* Activation / désactivation du module */}
+          <button
+            type="button"
+            onClick={() => setQrActive(v => !v)}
+            className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent
+              transition-colors duration-200 focus:outline-none
+              ${qrActive ? 'bg-green-500' : 'bg-white/20'}`}
+            role="switch"
+            aria-checked={qrActive}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow
+              transition-transform duration-200 ${qrActive ? 'translate-x-4' : 'translate-x-0'}`} />
+          </button>
+        </div>
+
+        <p className="text-xs text-gray-500 -mt-2">
+          Connectez votre compte AgoraPlus pour soumettre automatiquement les dossiers de remboursement
+          QualiRépar depuis chaque ticket.
+        </p>
+
+        {/* Message flash QualiRépar */}
+        {qrMsg && (
+          <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm border
+            ${qrMsg.type === 'success'
+              ? 'bg-green-400/10 border-green-400/20 text-green-400'
+              : 'bg-red-400/10 border-red-400/20 text-red-400'}`}>
+            {qrMsg.type === 'success'
+              ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+              : <AlertCircle  className="w-4 h-4 flex-shrink-0" />
+            }
+            {qrMsg.text}
+          </div>
+        )}
+
+        {/* Champ Clé API AgoraPlus */}
+        <div>
+          <label className={labelClass}>
+            Clé API AgoraPlus
+            <span className="text-gray-600 font-normal ml-1">(Bearer token)</span>
+          </label>
+          <div className="relative">
+            <input
+              type={showApiKey ? 'text' : 'password'}
+              value={qrApiKey}
+              onChange={e => setQrApiKey(e.target.value)}
+              placeholder="Collez votre clé API ici…"
+              className={inputClass + ' pr-10'}
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              onClick={() => setShowApiKey(v => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+              tabIndex={-1}
+            >
+              {showApiKey
+                ? <EyeOff className="w-4 h-4" />
+                : <Eye    className="w-4 h-4" />
+              }
+            </button>
+          </div>
+          <p className="text-xs text-gray-600 mt-1.5">
+            Trouvez cette clé dans votre espace AgoraPlus → API / Intégrations.
+          </p>
+        </div>
+
+        {/* Numéro de label QualiRépar */}
+        <div>
+          <label className={labelClass}>
+            Numéro de label QualiRépar
+            <span className="text-gray-600 font-normal ml-1">(optionnel)</span>
+          </label>
+          <input
+            type="text"
+            value={qrLabelNum}
+            onChange={e => setQrLabelNum(e.target.value)}
+            placeholder="Ex : QR-2024-XXXXX"
+            className={inputClass}
+          />
+        </div>
+
+        {/* Bouton sauvegarder */}
+        <div className="pt-1">
+          <button
+            onClick={handleSaveQR}
+            disabled={qrSaving || !shopId}
+            className="flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-500
+                       text-white text-sm font-semibold rounded-lg transition-colors
+                       disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {qrSaving
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Enregistrement…</>
+              : <><Save className="w-4 h-4" /> Enregistrer la config QualiRépar</>
+            }
+          </button>
+        </div>
+      </div>
+
+      {/* ── Section Apparence ── */}
+      <div className="bg-[#111118] rounded-xl border border-white/10 p-6">
+        <h2 className="text-white font-semibold text-sm mb-1 flex items-center gap-2">
+          🎨 Apparence
+        </h2>
+        <p className="text-xs text-gray-500 mb-5">
+          Choisissez le thème de l'interface. La préférence est sauvegardée automatiquement.
+        </p>
+        <ThemeSelector />
       </div>
 
       {/* ── Section compte ── */}

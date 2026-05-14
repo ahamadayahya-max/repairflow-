@@ -2,9 +2,11 @@
 
 import { useState, useCallback } from 'react'
 import { getSupabaseClient } from '@/lib/supabase/client'
+import PhotoGallery from '@/components/admin/PhotoGallery'
 import {
   Leaf, CheckCircle2, XCircle, Clock, Send, Upload,
-  Loader2, AlertCircle, ChevronDown, Euro, FileText, RefreshCw
+  Loader2, AlertCircle, ChevronDown, Euro, FileText, RefreshCw,
+  Camera,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -63,6 +65,7 @@ function formatDate(d) {
  *   qr_repair_code?:       string,
  *   device_type?:          string,
  *   device_brand?:         string,
+ *   qr_photos_count?:      number,
  *   onStatusChange?:       (s: string) => void,
  * }} props
  */
@@ -84,6 +87,7 @@ export default function QualiReparPanel({
   qr_repair_code:     initialRepair   = '',
   device_type,
   device_brand,
+  qr_photos_count:    initialQrPhotos = 0,
   onStatusChange,
 }) {
   const supabase = getSupabaseClient()
@@ -102,6 +106,8 @@ export default function QualiReparPanel({
   const [symptomCode, setSymptomCode] = useState(initialSymptom ?? '')
   const [repairCode,  setRepairCode]  = useState(initialRepair ?? '')
   const [invoiceFile, setInvoiceFile] = useState(null)
+
+  const [qrPhotosCount, setQrPhotosCount] = useState(initialQrPhotos)
 
   const [checking,   setChecking]   = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -177,7 +183,17 @@ export default function QualiReparPanel({
           invoice_mime_type:   invoiceMime,
         },
       })
-      if (error) throw new Error(error.message)
+
+      // Supabase JS encapsule les réponses non-2xx dans une FunctionsHttpError générique.
+      // On tente de lire le vrai message depuis le body de la réponse brute (error.context).
+      if (error) {
+        let msg = error.message
+        try {
+          const body = await error.context?.json?.()
+          if (body?.error) msg = body.error
+        } catch { /* body non lisible — on garde le message générique */ }
+        throw new Error(msg)
+      }
       if (!data?.ok) throw new Error(data?.error ?? 'Erreur soumission')
 
       setClaimId(data.claim_id)
@@ -381,6 +397,37 @@ export default function QualiReparPanel({
               Voir la facture soumise →
             </a>
           )}
+
+          {/* ── Section photos QualiRépar ─────────────────────────────── */}
+          <div className="pt-3 border-t border-white/5">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-semibold text-gray-400">
+                <Camera className="inline w-3.5 h-3.5 mr-1 -mt-0.5" />
+                Photos pour le dossier
+              </span>
+              {qrPhotosCount > 0 ? (
+                <span className="ml-auto text-[10px] px-2 py-0.5 bg-green-500/15 text-green-400 rounded-full font-semibold">
+                  ✓ {qrPhotosCount} photo{qrPhotosCount > 1 ? 's' : ''}
+                </span>
+              ) : (
+                <span className="ml-auto text-[10px] px-2 py-0.5 bg-orange-500/15 text-orange-400 rounded-full font-semibold">
+                  ⚠️ Aucune photo
+                </span>
+              )}
+            </div>
+
+            {/* Explication de la nécessité des photos pour le remboursement */}
+            <p className="text-xs text-amber-600/80 bg-amber-500/8 border border-amber-500/10 rounded-lg px-3 py-2 mb-3">
+              📋 Les photos justifient le dossier de remboursement AgoraPlus. Ajoutez au moins une preuve de réparation.
+            </p>
+
+            <PhotoGallery
+              ticketId={ticketId}
+              shopId={shopId}
+              mode="qualirepar"
+              onCountChange={setQrPhotosCount}
+            />
+          </div>
 
         </div>
       )}

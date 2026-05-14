@@ -1,38 +1,77 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { getSupabaseClient } from '@/lib/supabase/client'
 import {
-  Wrench, LayoutDashboard, Ticket, LogOut, Loader2, Menu, X,
-  Users, Package, Settings, LayoutGrid, FileText, Receipt, BarChart3, CalendarDays,
-  Zap, Leaf, ClipboardCheck,
+  Wrench, LogOut, Loader2, Menu, X, Zap,
+  LayoutGrid, Bell, Ticket, CalendarDays, Users, Leaf,
+  FileText, Receipt, BarChart3, Package, ShoppingCart,
+  HardHat, Settings, ClipboardCheck,
 } from 'lucide-react'
+import GlobalSearch from '@/components/admin/GlobalSearch'
+import NotificationBell from '@/components/admin/NotificationBell'
+import QuickCreate from '@/components/admin/QuickCreate'
+import Breadcrumb from '@/components/admin/Breadcrumb'
+import { ThemeToggleCompact } from '@/components/ThemeToggle'
 
 // ---------------------------------------------------------------------------
-// Navigation latérale
+// Structure de navigation groupée
 // ---------------------------------------------------------------------------
-const NAV_ITEMS = [
-  { href: '/admin/overview',      label: 'Vue d\'ensemble',  icon: LayoutGrid     },
-  { href: '/admin',               label: 'Tableau de bord',  icon: LayoutDashboard },
-  { href: '/admin/tickets',       label: 'Tickets',           icon: Ticket         },
-  { href: '/admin/clients',       label: 'Clients',           icon: Users          },
-  { href: '/admin/parts',         label: 'Pièces & Stock',    icon: Package        },
-  { href: '/admin/agenda',        label: 'Agenda',            icon: CalendarDays   },
-  { href: '/admin/devis',         label: 'Devis',             icon: FileText       },
-  { href: '/admin/factures',      label: 'Factures',          icon: Receipt        },
-  { href: '/admin/comptabilite',  label: 'Comptabilité',      icon: BarChart3      },
-  { href: '/admin/qualirepar',            label: 'QualiRépar',        icon: Leaf           },
-  { href: '/admin/qualirepar/conformite', label: 'Conformité label',   icon: ClipboardCheck, sub: true },
-  { href: '/admin/settings',              label: 'Paramètres',        icon: Settings       },
+const NAV_GROUPS = [
+  {
+    label: 'PRINCIPAL',
+    items: [
+      { href: '/admin/overview',      label: "Vue d'ensemble", icon: LayoutGrid,    badge: null },
+      { href: '/admin/notifications', label: 'Notifications',  icon: Bell,          badge: 'notif_unread' },
+    ],
+  },
+  {
+    label: 'ATELIER',
+    items: [
+      { href: '/admin/tickets',    label: 'Tickets',   icon: Ticket,       badge: 'tickets_ready' },
+      { href: '/admin/agenda',     label: 'Agenda',    icon: CalendarDays, badge: 'agenda_today' },
+      { href: '/admin/clients',    label: 'Clients',   icon: Users,        badge: null },
+      { href: '/admin/qualirepar', label: 'QualiRépar',icon: Leaf,         badge: 'qr_eligible' },
+    ],
+  },
+  {
+    label: 'FINANCES',
+    items: [
+      { href: '/admin/devis',        label: 'Devis',       icon: FileText, badge: 'devis_sent' },
+      { href: '/admin/factures',     label: 'Factures',    icon: Receipt,  badge: 'invoices_overdue' },
+      { href: '/admin/comptabilite', label: 'Comptabilité',icon: BarChart3,badge: null },
+    ],
+  },
+  {
+    label: 'STOCK',
+    items: [
+      { href: '/admin/parts',     label: 'Stock & Pièces', icon: Package,      badge: 'parts_out_of_stock' },
+      { href: '/admin/commandes', label: 'Commandes',      icon: ShoppingCart, badge: null },
+    ],
+  },
+  {
+    label: 'ADMINISTRATION',
+    items: [
+      { href: '/admin/techniciens',          label: 'Techniciens',  icon: HardHat,      badge: null },
+      { href: '/admin/settings',             label: 'Paramètres',   icon: Settings,     badge: null },
+      { href: '/admin/qualirepar/conformite',label: 'Conformité QR',icon: ClipboardCheck,badge: null },
+    ],
+  },
 ]
+
+// Couleur du badge selon le type
+function badgeColor(key) {
+  if (key === 'agenda_today')  return 'bg-blue-500 text-white'
+  if (key === 'qr_eligible')   return 'bg-amber-500 text-gray-900'
+  if (key === 'devis_sent')    return 'bg-gray-500 text-white'
+  return 'bg-red-500 text-white'
+}
 
 /**
  * Layout protégé de l'espace administration.
- * Vérifie la session Supabase, redirige vers /login si non connecté,
- * et vers /bienvenue si l'onboarding n'est pas complété.
- * Affiche un bandeau d'essai dans la sidebar si subscription_status = 'trial'.
+ * Sidebar groupée 240px + topbar avec recherche globale, création rapide, notifications.
  */
 export default function AdminLayout({ children }) {
   const router   = useRouter()
@@ -43,42 +82,73 @@ export default function AdminLayout({ children }) {
   const [shop,        setShop]        = useState(null)
   const [loading,     setLoading]     = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  // Badges { tickets_ready: 2, notif_unread: 5, ... }
+  const [badges,      setBadges]      = useState({})
+  const intervalRef = useRef(null)
 
-  // Raccourci Ctrl+P → focus sur le champ de recherche de pièces (#part-search-input)
-  const handleGlobalKeyDown = useCallback((e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
-      const el = document.getElementById('part-search-input')
-      if (el) {
-        e.preventDefault()
-        el.focus()
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }
+  // ---------------------------------------------------------------------------
+  // Chargement des badges en parallèle
+  // ---------------------------------------------------------------------------
+  const loadBadges = useCallback(async (shopId) => {
+    if (!shopId) return
+    try {
+      const today = new Date()
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()
+      const endOfDay   = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59).toISOString()
+
+      const [
+        { count: tickets_ready },
+        { count: notif_unread },
+        { count: agenda_today },
+        { count: qr_eligible },
+        { count: devis_sent },
+        { count: invoices_overdue },
+        { count: parts_out_of_stock },
+      ] = await Promise.all([
+        supabase.from('tickets').select('id', { count: 'exact', head: true })
+          .eq('shop_id', shopId).eq('status', 'ready'),
+        supabase.from('notifications').select('id', { count: 'exact', head: true })
+          .eq('shop_id', shopId).eq('read', false),
+        supabase.from('appointments').select('id', { count: 'exact', head: true })
+          .eq('shop_id', shopId).gte('start_at', startOfDay).lte('start_at', endOfDay),
+        supabase.from('tickets').select('id', { count: 'exact', head: true })
+          .eq('shop_id', shopId).eq('qr_eligible', true).eq('qr_status', 'eligible'),
+        supabase.from('quotes').select('id', { count: 'exact', head: true })
+          .eq('shop_id', shopId).eq('status', 'sent'),
+        supabase.from('invoices').select('id', { count: 'exact', head: true })
+          .eq('shop_id', shopId).eq('status', 'overdue'),
+        supabase.from('parts_inventory').select('id', { count: 'exact', head: true })
+          .eq('shop_id', shopId).lte('qty_stock', 0),
+      ])
+
+      setBadges({
+        tickets_ready:     tickets_ready   ?? 0,
+        notif_unread:      notif_unread    ?? 0,
+        agenda_today:      agenda_today    ?? 0,
+        qr_eligible:       qr_eligible     ?? 0,
+        devis_sent:        devis_sent      ?? 0,
+        invoices_overdue:  invoices_overdue ?? 0,
+        parts_out_of_stock:parts_out_of_stock ?? 0,
+      })
+    } catch (_) {
+      // Silencieux pour éviter de bloquer l'UI si une table n'existe pas encore
     }
-  }, [])
+  }, [supabase])
 
-  useEffect(() => {
-    document.addEventListener('keydown', handleGlobalKeyDown)
-    return () => document.removeEventListener('keydown', handleGlobalKeyDown)
-  }, [handleGlobalKeyDown])
-
-  // Vérification de session + onboarding au montage
+  // ---------------------------------------------------------------------------
+  // Vérification session + onboarding
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session) {
-        router.replace('/login')
-        return
-      }
-
+      if (!session) { router.replace('/login'); return }
       setUser(session.user)
 
-      // Charge les infos shop (onboarding + trial)
       const { data: shopData } = await supabase
         .from('shops')
         .select('id, name, onboarding_completed, subscription_status, trial_ends_at, plan')
         .eq('owner_id', session.user.id)
         .maybeSingle()
 
-      // Si onboarding non complété → redirige vers /bienvenue
       if (!shopData || !shopData.onboarding_completed) {
         router.replace('/bienvenue')
         return
@@ -86,14 +156,22 @@ export default function AdminLayout({ children }) {
 
       setShop(shopData)
       setLoading(false)
+
+      // Premier chargement des badges
+      await loadBadges(shopData.id)
+
+      // Rafraîchissement toutes les 60 secondes
+      intervalRef.current = setInterval(() => loadBadges(shopData.id), 60_000)
     })
 
-    // Écoute les changements d'auth (déconnexion depuis un autre onglet, etc.)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) router.replace('/login')
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
   }, [])
 
   const handleLogout = async () => {
@@ -101,13 +179,12 @@ export default function AdminLayout({ children }) {
     router.replace('/login')
   }
 
-  // Calcul des jours restants d'essai
+  // Jours d'essai restants
   const trialDaysLeft = shop?.trial_ends_at
     ? Math.max(0, Math.ceil(
         (new Date(shop.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
       ))
     : 0
-
   const isTrial = shop?.subscription_status === 'trial'
 
   if (loading) {
@@ -121,7 +198,7 @@ export default function AdminLayout({ children }) {
   return (
     <div className="min-h-screen bg-[#0F0F1A] flex">
 
-      {/* Overlay mobile */}
+      {/* Overlay mobile — fermeture au tap extérieur */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-20 bg-black/60 lg:hidden"
@@ -129,13 +206,14 @@ export default function AdminLayout({ children }) {
         />
       )}
 
-      {/* Sidebar */}
+      {/* ── Sidebar 240px ── */}
       <aside className={`
         fixed top-0 left-0 z-30 h-full w-60 bg-[#111118] border-r border-white/10
         flex flex-col transition-transform duration-200
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0 lg:static lg:z-auto
       `}>
+
         {/* Logo */}
         <div className="flex items-center gap-2.5 px-5 py-5 border-b border-white/10">
           <div className="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center">
@@ -144,34 +222,49 @@ export default function AdminLayout({ children }) {
           <span className="text-white font-bold text-base">RepairFlow</span>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {NAV_ITEMS.map(({ href, label, icon: Icon, sub }) => {
-            const active = pathname === href || (href !== '/admin' && href !== '/admin/overview' && pathname.startsWith(href))
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => setSidebarOpen(false)}
-                className={`
-                  flex items-center gap-3 rounded-lg text-sm font-medium transition-colors
-                  ${sub ? 'ml-4 px-3 py-2' : 'px-3 py-2.5'}
-                  ${active
-                    ? 'bg-amber-500/15 text-amber-300 border border-amber-500/20'
-                    : sub
-                    ? 'text-gray-600 hover:text-gray-300 hover:bg-white/5'
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                  }
-                `}
-              >
-                <Icon className={`flex-shrink-0 ${sub ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
-                {label}
-              </Link>
-            )
-          })}
+        {/* Navigation groupée */}
+        <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-5">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.label}>
+              <p className="text-[10px] font-bold text-gray-600 tracking-widest px-3 mb-1.5">
+                {group.label}
+              </p>
+              <div className="space-y-0.5">
+                {group.items.map(({ href, label, icon: Icon, badge: badgeKey }) => {
+                  const active = pathname === href
+                    || (href !== '/admin' && href !== '/admin/overview' && pathname.startsWith(href))
+                  const count = badgeKey ? (badges[badgeKey] ?? 0) : 0
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={() => setSidebarOpen(false)}
+                      className={`
+                        flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
+                        transition-colors
+                        ${active
+                          ? 'bg-amber-500/15 text-amber-300 border border-amber-500/20'
+                          : 'text-gray-400 hover:text-white hover:bg-white/5'
+                        }
+                      `}
+                    >
+                      <Icon className="w-4 h-4 flex-shrink-0" />
+                      <span className="flex-1 truncate">{label}</span>
+                      {count > 0 && (
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none
+                          ${badgeColor(badgeKey)}`}>
+                          {count > 99 ? '99+' : count}
+                        </span>
+                      )}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
-        {/* ── Bandeau essai gratuit ── */}
+        {/* Bandeau essai gratuit */}
         {isTrial && (
           <div className="mx-3 mb-3 p-3 bg-amber-500/8 border border-amber-500/15 rounded-xl">
             <div className="text-xs font-semibold text-amber-400 mb-1 flex items-center gap-1.5">
@@ -181,7 +274,6 @@ export default function AdminLayout({ children }) {
             <div className="text-xs text-amber-500/80 mb-2">
               {trialDaysLeft} jour{trialDaysLeft > 1 ? 's' : ''} restant{trialDaysLeft > 1 ? 's' : ''}
             </div>
-            {/* Barre de progression de l'essai (s'écoule de gauche à droite) */}
             <div className="w-full bg-white/10 rounded-full h-1.5 mb-2.5">
               <div
                 className="bg-amber-500 h-1.5 rounded-full transition-all"
@@ -199,32 +291,68 @@ export default function AdminLayout({ children }) {
           </div>
         )}
 
-        {/* Pied de sidebar — utilisateur connecté */}
-        <div className="px-4 py-4 border-t border-white/10">
-          <p className="text-xs text-gray-500 truncate mb-2">{user?.email}</p>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 text-sm text-gray-400 hover:text-red-400 transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            Déconnexion
-          </button>
+        {/* Pied de sidebar */}
+        <div className="px-3 py-4 border-t border-white/10 space-y-3">
+          {/* Toggle thème clair / sombre */}
+          <ThemeToggleCompact />
+
+          {/* Infos atelier + déconnexion */}
+          <div className="px-1">
+            {shop?.name && (
+              <p className="text-xs font-semibold text-gray-300 truncate mb-0.5">{shop.name}</p>
+            )}
+            <p className="text-xs text-gray-500 truncate mb-2">{user?.email}</p>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 text-sm text-gray-400 hover:text-red-400 transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              Déconnexion
+            </button>
+          </div>
         </div>
       </aside>
 
-      {/* Contenu principal */}
+      {/* ── Zone principale ── */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Topbar mobile */}
-        <header className="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-white/10 bg-[#111118]">
-          <button onClick={() => setSidebarOpen(true)} className="text-gray-400 hover:text-white">
+
+        {/* Topbar — visible desktop ET mobile */}
+        <header className="flex items-center gap-3 px-4 py-3 border-b border-white/10 bg-[#111118] sticky top-0 z-10">
+
+          {/* Hamburger mobile */}
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="lg:hidden text-gray-400 hover:text-white flex-shrink-0"
+          >
             <Menu className="w-5 h-5" />
           </button>
-          <div className="flex items-center gap-2">
+
+          {/* Logo mobile uniquement */}
+          <div className="lg:hidden flex items-center gap-2 flex-shrink-0">
             <Wrench className="w-4 h-4 text-amber-400" />
             <span className="text-white font-bold text-sm">RepairFlow</span>
           </div>
+
+          {/* Breadcrumb desktop */}
+          <div className="hidden lg:flex flex-1 min-w-0">
+            <Breadcrumb />
+          </div>
+
+          {/* Espace flexible sur mobile */}
+          <div className="flex-1 lg:hidden" />
+
+          {/* Actions topbar */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <GlobalSearch />
+            <QuickCreate />
+            <NotificationBell
+              shopId={shop?.id}
+              onRead={() => loadBadges(shop?.id)}
+            />
+          </div>
         </header>
 
+        {/* Contenu de la page */}
         <main className="flex-1 p-4 lg:p-6 overflow-auto">
           {children}
         </main>

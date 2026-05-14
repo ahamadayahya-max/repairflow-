@@ -2,63 +2,54 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { getSupabaseClient } from '@/lib/supabase/client'
-import PaymentModal from '@/components/admin/PaymentModal'
 import {
-  Receipt, Plus, Search, Download, Loader2, RefreshCw,
-  Eye, CreditCard, CheckCircle2, XCircle, TrendingUp, Clock, AlertTriangle,
+  Receipt, Plus, Search, Download, Loader2,
+  CheckCircle2, XCircle, Clock, Send, AlertTriangle, ChevronRight,
 } from 'lucide-react'
-import { format } from 'date-fns'
-import { fr } from 'date-fns/locale'
+import NewInvoiceModal from '@/components/admin/invoices/NewInvoiceModal'
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Config statuts
 // ---------------------------------------------------------------------------
-
 const STATUS_CFG = {
-  draft:     { label: 'Brouillon',   color: 'text-gray-400',   bg: 'bg-gray-400/10'   },
-  sent:      { label: 'Envoyée',     color: 'text-blue-400',   bg: 'bg-blue-400/10'   },
-  paid:      { label: 'Payée',       color: 'text-green-400',  bg: 'bg-green-400/10'  },
-  partial:   { label: 'Partiel',     color: 'text-amber-400',  bg: 'bg-amber-400/10'  },
-  overdue:   { label: 'En retard',   color: 'text-red-400',    bg: 'bg-red-400/10'    },
-  cancelled: { label: 'Annulée',     color: 'text-gray-600',   bg: 'bg-gray-600/10'   },
+  draft:     { label: 'Brouillon', color: 'text-gray-400',  bg: 'bg-gray-400/10',  icon: Clock        },
+  sent:      { label: 'Envoyée',   color: 'text-blue-400',  bg: 'bg-blue-400/10',  icon: Send         },
+  paid:      { label: 'Payée',     color: 'text-green-400', bg: 'bg-green-400/10', icon: CheckCircle2 },
+  cancelled: { label: 'Annulée',   color: 'text-red-400',   bg: 'bg-red-400/10',   icon: XCircle      },
 }
 
 function StatusBadge({ status }) {
   const cfg = STATUS_CFG[status] ?? STATUS_CFG.draft
+  const Icon = cfg.icon
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${cfg.bg} ${cfg.color}`}>
-      {cfg.label}
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full
+                      text-[10px] font-semibold ${cfg.bg} ${cfg.color}`}>
+      <Icon className="w-2.5 h-2.5" />{cfg.label}
     </span>
   )
 }
 
 function eur(n) {
-  return Number(n || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
+  return Number(n || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 }) + ' €'
 }
 
 function fmtDate(d) {
   if (!d) return '—'
-  try { return format(new Date(d), 'dd MMM yyyy', { locale: fr }) } catch { return '—' }
+  return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: '2-digit' })
 }
 
-// ---------------------------------------------------------------------------
-// KPI Card
-// ---------------------------------------------------------------------------
-
-function KpiCard({ label, value, icon: Icon, color, bg, sub }) {
+function KpiCard({ label, value, icon, color, sub }) {
   return (
-    <div className="bg-[#111118] rounded-xl border border-white/10 p-4">
+    <div className="bg-[#111118] border border-white/10 rounded-xl p-4">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs text-gray-500 uppercase tracking-wide">{label}</span>
-        <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${bg}`}>
-          <Icon className={`w-3.5 h-3.5 ${color}`} />
-        </div>
+        <span className="text-lg">{icon}</span>
       </div>
-      <p className={`text-xl font-bold tabular-nums ${color}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-600 mt-0.5">{sub}</p>}
+      <p className={`text-xl font-bold tabular-nums ${color || 'text-white'}`}>{value}</p>
+      {sub && <p className="text-[10px] text-gray-600 mt-0.5">{sub}</p>}
     </div>
   )
 }
@@ -66,309 +57,190 @@ function KpiCard({ label, value, icon: Icon, color, bg, sub }) {
 // ---------------------------------------------------------------------------
 // Page principale
 // ---------------------------------------------------------------------------
-
+/**
+ * Liste des factures avec KPIs, filtres et création rapide.
+ */
 export default function FacturesPage() {
   const supabase = getSupabaseClient()
 
   const [shopId,    setShopId]    = useState(null)
   const [invoices,  setInvoices]  = useState([])
   const [loading,   setLoading]   = useState(true)
+  const [showModal, setShowModal] = useState(false)
+  const [filter,    setFilter]    = useState('all')
   const [search,    setSearch]    = useState('')
-  const [statusF,   setStatusF]   = useState('all')
-  const [flash,     setFlash]     = useState(null)
-  const [payTarget, setPayTarget] = useState(null)  // facture pour PaymentModal
-  const [stats,     setStats]     = useState({ totalTTC: 0, paid: 0, pending: 0, overdue: 0 })
-
-  // ---------------------------------------------------------------------------
-  // Chargement
-  // ---------------------------------------------------------------------------
-
-  const load = useCallback(async (sid) => {
-    const id = sid ?? shopId
-    if (!id) return
-    setLoading(true)
-
-    const { data } = await supabase
-      .from('invoices')
-      .select(`
-        id, invoice_number, status, issue_date, due_date,
-        total_ht, total_ttc, total_net, amount_paid, qr_deduction,
-        payment_method, payment_date, shop_id,
-        clients!invoices_client_id_fkey(full_name, phone)
-      `)
-      .eq('shop_id', id)
-      .order('created_at', { ascending: false })
-
-    const list = data || []
-    setInvoices(list)
-
-    // Stats locales
-    const totalTTC = list.reduce((s, i) => s + Number(i.total_ttc || 0), 0)
-    const paid     = list.reduce((s, i) => s + Number(i.amount_paid || 0), 0)
-    const pending  = list.filter(i => ['sent','partial','draft'].includes(i.status))
-      .reduce((s, i) => s + Math.max(0, Number(i.total_net || 0) - Number(i.amount_paid || 0)), 0)
-    const overdue  = list.filter(i => i.status === 'overdue').length
-
-    setStats({ totalTTC, paid, pending, overdue })
-    setLoading(false)
-  }, [shopId])
 
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data: shop } = await supabase.from('shops').select('id').eq('owner_id', user.id).single()
+      const { data: shop } = await supabase
+        .from('shops').select('id').eq('owner_id', user.id).maybeSingle()
       if (!shop) { setLoading(false); return }
       setShopId(shop.id)
-      load(shop.id)
+      await loadInvoices(shop.id)
+      setLoading(false)
     }
     init()
   }, [])
 
-  // ---------------------------------------------------------------------------
-  // Flash
-  // ---------------------------------------------------------------------------
-
-  function showFlash(type, msg) {
-    setFlash({ type, msg })
-    setTimeout(() => setFlash(null), 3000)
+  const loadInvoices = async (sid) => {
+    const { data } = await supabase
+      .from('invoices')
+      .select('id, invoice_number, client_name, client_email, status, subtotal_ht, tva_amount, total_ttc, qualirepar_bonus, total_net, issued_at, due_at, paid_at')
+      .eq('shop_id', sid)
+      .order('created_at', { ascending: false })
+    setInvoices(data ?? [])
   }
 
-  // ---------------------------------------------------------------------------
-  // Filtrage
-  // ---------------------------------------------------------------------------
+  // Statistiques calculées côté client
+  const stats = {
+    ca_month: invoices
+      .filter(i => i.status === 'paid' && i.paid_at &&
+        new Date(i.paid_at).getMonth() === new Date().getMonth() &&
+        new Date(i.paid_at).getFullYear() === new Date().getFullYear())
+      .reduce((s, i) => s + parseFloat(i.total_net || 0), 0),
+    total_sent: invoices.filter(i => i.status === 'sent').length,
+    total_paid: invoices.filter(i => i.status === 'paid').length,
+    overdue: invoices.filter(i =>
+      i.status === 'sent' && i.due_at && new Date(i.due_at) < new Date()
+    ).length,
+  }
 
   const filtered = invoices.filter(inv => {
-    if (statusF !== 'all' && inv.status !== statusF) return false
-    if (search) {
-      const s = search.toLowerCase()
-      return (
-        inv.invoice_number?.toLowerCase().includes(s) ||
-        inv.clients?.full_name?.toLowerCase().includes(s)
-      )
-    }
-    return true
+    const matchStatus = filter === 'all' || inv.status === filter
+    const q = search.toLowerCase()
+    const matchSearch = !q ||
+      inv.invoice_number?.toLowerCase().includes(q) ||
+      inv.client_name?.toLowerCase().includes(q)
+    return matchStatus && matchSearch
   })
 
-  // ---------------------------------------------------------------------------
-  // Actions
-  // ---------------------------------------------------------------------------
-
-  async function handleMarkPaid(inv) {
-    const { error } = await supabase.from('invoices').update({
-      status:         'paid',
-      amount_paid:    inv.total_net ?? inv.total_ttc,
-      payment_date:   new Date().toISOString(),
-    }).eq('id', inv.id)
-    if (error) showFlash('error', error.message)
-    else { showFlash('success', 'Facture marquée payée'); load() }
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-7 h-7 text-amber-400 animate-spin" />
+      </div>
+    )
   }
-
-  async function handleCancel(inv) {
-    if (!window.confirm(`Annuler la facture ${inv.invoice_number} ?`)) return
-    const { error } = await supabase.from('invoices').update({ status: 'cancelled' }).eq('id', inv.id)
-    if (error) showFlash('error', error.message)
-    else { showFlash('success', 'Facture annulée'); load() }
-  }
-
-  async function handleDownloadPDF(inv) {
-    try {
-      const { data: lines } = await supabase
-        .from('invoice_lines').select('*').eq('invoice_id', inv.id).order('sort_order')
-      const { data: clientData } = inv.client_id
-        ? await supabase.from('clients').select('*').eq('id', inv.client_id).single()
-        : { data: null }
-      const { data: shopData } = await supabase
-        .from('shops').select('name, address, phone, email').eq('id', shopId).single()
-
-      const [{ default: InvoicePDF }, { pdf }, { createElement }] = await Promise.all([
-        import('@/components/admin/pdf/InvoicePDF'),
-        import('@react-pdf/renderer'),
-        import('react'),
-      ])
-      const blob = await pdf(createElement(InvoicePDF, {
-        invoice: inv, lines: lines || [], shop: shopData || {}, client: clientData || {},
-      })).toBlob()
-
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url; a.download = `facture-${inv.invoice_number}.pdf`; a.click()
-      URL.revokeObjectURL(url)
-    } catch (err) {
-      showFlash('error', 'Erreur PDF : ' + err.message)
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Rendu
-  // ---------------------------------------------------------------------------
 
   return (
-    <div className="space-y-5">
-      {flash && (
-        <div className={`fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl text-sm font-medium shadow-lg
-          ${flash.type === 'success' ? 'bg-green-500/20 text-green-300 border border-green-500/30' : 'bg-red-500/20 text-red-300 border border-red-500/30'}`}>
-          {flash.msg}
-        </div>
-      )}
-
-      {/* PaymentModal */}
-      {payTarget && (
-        <PaymentModal
-          invoice={payTarget}
-          isOpen={true}
-          onClose={() => setPayTarget(null)}
-          onSuccess={() => { setPayTarget(null); load() }}
+    <div className="space-y-6">
+      {showModal && shopId && (
+        <NewInvoiceModal
+          shopId={shopId}
+          onClose={() => setShowModal(false)}
+          onCreated={() => loadInvoices(shopId)}
         />
       )}
 
       {/* En-tête */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-white font-bold text-xl flex items-center gap-2">
             <Receipt className="w-5 h-5 text-amber-400" />
-            Factures
+            Facturation
           </h1>
-          <p className="text-gray-500 text-sm mt-0.5">{filtered.length} facture{filtered.length > 1 ? 's' : ''}</p>
+          <p className="text-gray-500 text-sm mt-0.5">{invoices.length} facture{invoices.length > 1 ? 's' : ''}</p>
         </div>
-        <Link
-          href="/admin/factures/nouvelle"
+        <button onClick={() => setShowModal(true)}
           className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400
-                     text-white text-sm font-semibold rounded-lg transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Nouvelle facture
-        </Link>
-      </div>
-
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard label="Total facturé" value={eur(stats.totalTTC)}
-          icon={TrendingUp} color="text-white" bg="bg-white/5" />
-        <KpiCard label="Encaissé" value={eur(stats.paid)}
-          icon={CheckCircle2} color="text-green-400" bg="bg-green-400/10" />
-        <KpiCard label="En attente" value={eur(stats.pending)}
-          icon={Clock} color="text-amber-400" bg="bg-amber-400/10" />
-        <KpiCard label="En retard" value={`${stats.overdue} facture${stats.overdue > 1 ? 's' : ''}`}
-          icon={AlertTriangle} color="text-red-400" bg="bg-red-400/10" />
-      </div>
-
-      {/* Filtres */}
-      <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[180px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Rechercher…"
-            className="w-full bg-[#111118] border border-white/10 rounded-xl pl-9 pr-3 py-2
-                       text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-amber-500/40" />
-        </div>
-        <select value={statusF} onChange={e => setStatusF(e.target.value)}
-          className="bg-[#111118] border border-white/10 rounded-xl px-3 py-2 text-sm
-                     text-gray-200 focus:outline-none focus:border-amber-500/40">
-          <option value="all">Tous les statuts</option>
-          {Object.entries(STATUS_CFG).map(([k, v]) => (
-            <option key={k} value={k}>{v.label}</option>
-          ))}
-        </select>
-        <button onClick={() => load()}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-400 hover:text-white
-                     bg-white/5 border border-white/10 rounded-xl transition-colors">
-          <RefreshCw className="w-3.5 h-3.5" />
+                     text-white text-sm font-semibold rounded-lg transition-colors">
+          <Plus className="w-4 h-4" /> Nouvelle facture
         </button>
       </div>
 
+      {/* KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard label="CA ce mois"   value={eur(stats.ca_month)}  icon="💰" color="text-amber-400" sub="Factures payées" />
+        <KpiCard label="À encaisser"  value={stats.total_sent}     icon="📤" color="text-blue-400"  sub="Envoyées" />
+        <KpiCard label="Payées"       value={stats.total_paid}     icon="✅" color="text-green-400" sub="Total" />
+        <KpiCard label="En retard"    value={stats.overdue}        icon="⚠️"
+                 color={stats.overdue > 0 ? 'text-red-400' : 'text-gray-500'} sub="Échéance dépassée" />
+      </div>
+
+      {/* Filtres + recherche */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" />
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Rechercher…"
+            className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-lg
+                       text-white text-sm placeholder-gray-600 focus:outline-none focus:border-amber-500/50" />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {['all', ...Object.keys(STATUS_CFG)].map(s => (
+            <button key={s} onClick={() => setFilter(s)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
+                ${filter === s ? 'bg-amber-500 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'}`}>
+              {s === 'all' ? 'Toutes' : STATUS_CFG[s]?.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Tableau */}
-      <div className="bg-[#111118] rounded-xl border border-white/10 overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-6 h-6 text-amber-400 animate-spin" />
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <Receipt className="w-8 h-8 text-gray-700 mb-2" />
-            <p className="text-sm text-gray-500">
-              {invoices.length === 0 ? 'Aucune facture pour le moment' : 'Aucun résultat'}
-            </p>
-            {invoices.length === 0 && (
-              <Link href="/admin/factures/nouvelle" className="mt-3 text-xs text-amber-400 hover:text-amber-300">
-                Créer la première facture →
-              </Link>
-            )}
-          </div>
-        ) : (
+      {filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center min-h-[280px] text-center
+                        bg-[#111118] border border-white/10 rounded-xl">
+          <Receipt className="w-10 h-10 text-gray-700 mb-3" />
+          <p className="text-sm text-gray-500">Aucune facture</p>
+          <button onClick={() => setShowModal(true)}
+            className="mt-4 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-white
+                       text-sm font-semibold rounded-lg transition-colors">
+            + Nouvelle facture
+          </button>
+        </div>
+      ) : (
+        <div className="bg-[#111118] border border-white/10 rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/10">
-                  {['Numéro', 'Client', 'Émise', 'Échéance', 'Total TTC', 'Payé', 'Reste dû', 'Statut', 'Actions'].map(h => (
-                    <th key={h} className="px-3 py-3 text-left text-[10px] text-gray-500 uppercase tracking-wide font-medium">
-                      {h}
-                    </th>
+                  {['N° Facture','Client','Statut','HT','TTC','Net à payer','Émise le','Échéance',''].map(h => (
+                    <th key={h} className="px-4 py-3 text-left text-[10px] font-bold text-gray-600
+                                           uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {filtered.map(inv => {
-                  const resteDu = Math.max(0, Number(inv.total_net || 0) - Number(inv.amount_paid || 0))
+                  const isOverdue = inv.status === 'sent' && inv.due_at && new Date(inv.due_at) < new Date()
                   return (
-                    <tr key={inv.id} className="hover:bg-white/[0.02] transition-colors group">
-                      <td className="px-3 py-3">
-                        <Link href={`/admin/factures/${inv.id}`}
-                          className="font-mono text-amber-400 hover:text-amber-300 text-xs font-medium">
-                          {inv.invoice_number}
-                        </Link>
+                    <tr key={inv.id} className="hover:bg-white/3 transition-colors group">
+                      <td className="px-4 py-3 font-mono text-xs text-amber-400 whitespace-nowrap">
+                        {inv.invoice_number}
                       </td>
-                      <td className="px-3 py-3">
-                        <p className="text-gray-200">{inv.clients?.full_name || '—'}</p>
-                        <p className="text-xs text-gray-600">{inv.clients?.phone || ''}</p>
+                      <td className="px-4 py-3">
+                        <p className="text-gray-200 font-medium">{inv.client_name}</p>
+                        {inv.client_email && <p className="text-gray-600 text-xs">{inv.client_email}</p>}
                       </td>
-                      <td className="px-3 py-3 text-gray-400 text-xs">{fmtDate(inv.issue_date)}</td>
-                      <td className="px-3 py-3 text-xs">
-                        <span className={inv.status === 'overdue' ? 'text-red-400' : 'text-gray-400'}>
-                          {fmtDate(inv.due_date)}
-                        </span>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={inv.status} />
+                        {isOverdue && <span className="ml-1 text-[10px] text-red-400 font-bold">RETARD</span>}
                       </td>
-                      <td className="px-3 py-3 tabular-nums text-gray-200 font-medium text-xs">
+                      <td className="px-4 py-3 text-gray-400 text-xs tabular-nums whitespace-nowrap">
+                        {eur(inv.subtotal_ht)}
+                      </td>
+                      <td className="px-4 py-3 text-gray-300 text-xs tabular-nums whitespace-nowrap">
                         {eur(inv.total_ttc)}
                       </td>
-                      <td className="px-3 py-3 tabular-nums text-green-400 text-xs">
-                        {eur(inv.amount_paid)}
+                      <td className="px-4 py-3 font-semibold tabular-nums whitespace-nowrap">
+                        <span className="text-white">{eur(inv.total_net)}</span>
+                        {parseFloat(inv.qualirepar_bonus || 0) > 0 && (
+                          <span className="ml-1 text-[10px] text-green-400">🔁 -{eur(inv.qualirepar_bonus)}</span>
+                        )}
                       </td>
-                      <td className="px-3 py-3 tabular-nums text-xs">
-                        <span className={resteDu > 0 ? 'text-amber-400' : 'text-gray-600'}>
-                          {eur(resteDu)}
-                        </span>
+                      <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{fmtDate(inv.issued_at)}</td>
+                      <td className={`px-4 py-3 text-xs whitespace-nowrap ${isOverdue ? 'text-red-400 font-semibold' : 'text-gray-500'}`}>
+                        {fmtDate(inv.due_at)}
                       </td>
-                      <td className="px-3 py-3"><StatusBadge status={inv.status} /></td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Link href={`/admin/factures/${inv.id}`}
-                            className="p-1.5 text-gray-500 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Voir">
-                            <Eye className="w-3.5 h-3.5" />
-                          </Link>
-                          {inv.status !== 'paid' && inv.status !== 'cancelled' && (
-                            <button onClick={() => setPayTarget(inv)}
-                              className="p-1.5 text-gray-500 hover:text-green-400 hover:bg-green-400/10 rounded-lg transition-colors" title="Paiement">
-                              <CreditCard className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          <button onClick={() => handleDownloadPDF(inv)}
-                            className="p-1.5 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors" title="PDF">
-                            <Download className="w-3.5 h-3.5" />
-                          </button>
-                          {inv.status === 'sent' && (
-                            <button onClick={() => handleMarkPaid(inv)}
-                              className="p-1.5 text-gray-500 hover:text-green-400 hover:bg-green-400/10 rounded-lg transition-colors" title="Marquer payée">
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          {inv.status === 'draft' && (
-                            <button onClick={() => handleCancel(inv)}
-                              className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors" title="Annuler">
-                              <XCircle className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
+                      <td className="px-4 py-3">
+                        <Link href={`/admin/factures/${inv.id}`}
+                          className="flex items-center justify-center w-7 h-7 rounded-lg
+                                     text-gray-700 group-hover:text-amber-400 hover:bg-white/5 transition-colors">
+                          <ChevronRight className="w-4 h-4" />
+                        </Link>
                       </td>
                     </tr>
                   )
@@ -376,8 +248,8 @@ export default function FacturesPage() {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

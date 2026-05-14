@@ -2,348 +2,502 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { Wrench, ArrowRight } from 'lucide-react'
+import { getSupabaseClient } from '@/lib/supabase/client'
+import {
+  Ticket, Wrench, CheckCircle2, PackageCheck, TrendingUp,
+  AlertTriangle, Receipt, Clock, ArrowRight, RefreshCw,
+  Loader2, Package, Users, BarChart3,
+} from 'lucide-react'
 
 // ---------------------------------------------------------------------------
-// Modules de la plateforme
+// Helpers
 // ---------------------------------------------------------------------------
+function eur(n) {
+  return Number(n || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 }) + ' €'
+}
 
-const MODULES = [
-  {
-    id:     'tickets',
-    label:  'Tickets',
-    emoji:  '🎫',
-    color:  '#14B8A6',
-    bg:     'rgba(20,184,166,0.15)',
-    status: 'actif',
-    href:   '/admin/tickets',
-    desc:   'Créez et suivez les réparations. Chaque ticket trace le cycle de vie complet d\'un appareil, des pièces utilisées aux notifications client automatiques.',
-  },
-  {
-    id:     'clients',
-    label:  'CRM Clients',
-    emoji:  '👥',
-    color:  '#3B82F6',
-    bg:     'rgba(59,130,246,0.15)',
-    status: 'actif',
-    href:   '/admin/clients',
-    desc:   'Base de données clients unifiée. Retrouvez l\'historique de réparations, les coordonnées et les préférences de chaque client en un coup d\'œil.',
-  },
-  {
-    id:     'parts',
-    label:  'Stock',
-    emoji:  '📦',
-    color:  '#A855F7',
-    bg:     'rgba(168,85,247,0.15)',
-    status: 'actif',
-    href:   '/admin/parts',
-    desc:   'Gérez votre inventaire de pièces détachées, suivez les niveaux de stock et recevez des alertes de réapprovisionnement avant la rupture.',
-  },
-  {
-    id:     'dashboard',
-    label:  'Dashboard',
-    emoji:  '📊',
-    color:  '#60A5FA',
-    bg:     'rgba(96,165,250,0.15)',
-    status: 'actif',
-    href:   '/admin',
-    desc:   'Tableau de bord temps réel avec KPIs, graphiques de volume hebdomadaire et alertes de stock. Vue synthétique de votre activité quotidienne.',
-  },
-  {
-    id:     'agenda',
-    label:  'Agenda',
-    emoji:  '📅',
-    color:  '#F59E0B',
-    bg:     'rgba(245,158,11,0.15)',
-    status: 'actif',
-    href:   '/admin/agenda',
-    desc:   'Planifiez les rendez-vous de dépose et de récupération d\'appareils. Glisser-déposer, rappels SMS automatiques et vue hebdomadaire intégrée.',
-  },
-  {
-    id:     'devis',
-    label:  'Devis',
-    emoji:  '📄',
-    color:  '#F97316',
-    bg:     'rgba(249,115,22,0.15)',
-    status: 'actif',
-    href:   '/admin/devis',
-    desc:   'Générez des devis professionnels en quelques clics et convertissez-les directement en factures d\'un simple bouton.',
-  },
-  {
-    id:     'factures',
-    label:  'Factures',
-    emoji:  '🧾',
-    color:  '#22C55E',
-    bg:     'rgba(34,197,94,0.15)',
-    status: 'actif',
-    href:   '/admin/factures',
-    desc:   'Créez et envoyez des factures conformes à la législation. Suivi des paiements et export comptable intégré pour votre expert-comptable.',
-  },
-  {
-    id:     'qualirepar',
-    label:  'QualiRépar',
-    emoji:  '🔁',
-    color:  '#EC4899',
-    bg:     'rgba(236,72,153,0.15)',
-    status: 'en-cours',
-    href:   '/admin/qualirepar',
-    desc:   'Conformité au label QualiRépar. Suivi des critères de qualité de réparation et génération automatique des rapports de certification.',
-  },
-]
+function fmtDate(d) {
+  if (!d) return '—'
+  return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })
+}
 
-const STATUS_CONFIG = {
-  'actif':         { label: 'Actif',          color: 'text-green-400', bg: 'bg-green-400/10'  },
-  'en-cours':      { label: 'En cours',        color: 'text-amber-400', bg: 'bg-amber-400/10'  },
-  'a-implementer': { label: 'À implémenter',   color: 'text-gray-400',  bg: 'bg-gray-400/10'   },
+function dayLabel(date) {
+  return new Date(date).toLocaleDateString('fr-FR', { weekday: 'short' })
 }
 
 // ---------------------------------------------------------------------------
-// Page Vue d'ensemble — diagramme orbital
+// Composant KPI
 // ---------------------------------------------------------------------------
-
 /**
- * Page d'accueil visuelle avec diagramme orbital des modules RepairFlow.
+ * Carte KPI avec icône, valeur et sous-titre.
+ * @param {{ label: string, value: string|number, icon: React.FC, color: string, bg: string, sub?: string, href?: string }} props
  */
-export default function OverviewPage() {
-  const containerRef = useRef(null)
-  const [dims,     setDims]     = useState({ w: 600, h: 500 })
-  const [selected, setSelected] = useState(null)
+function KpiCard({ label, value, icon: Icon, color, bg, sub, href }) {
+  const inner = (
+    <div className={`bg-[#111118] border border-white/10 rounded-xl p-4 transition-colors
+                     ${href ? 'hover:border-white/20 cursor-pointer' : ''}`}>
+      <div className="flex items-start justify-between mb-3">
+        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${bg}`}>
+          <Icon className={`w-4.5 h-4.5 ${color}`} style={{ width: 18, height: 18 }} />
+        </div>
+        {href && <ArrowRight className="w-3.5 h-3.5 text-gray-700 mt-1" />}
+      </div>
+      <p className={`text-2xl font-bold tabular-nums ${color}`}>{value}</p>
+      <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+      {sub && <p className="text-[10px] text-gray-700 mt-1">{sub}</p>}
+    </div>
+  )
+  return href ? <Link href={href}>{inner}</Link> : inner
+}
 
-  // Recalcule les dimensions à chaque redimensionnement du conteneur
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-
-    setDims({ w: el.offsetWidth, h: el.offsetHeight })
-
-    const ro = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect
-      setDims({ w: width, h: height })
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
-  const { w, h } = dims
-  const cx     = w / 2
-  const cy     = h / 2
-  const radius = Math.min(w, h) * 0.38
-  const n      = MODULES.length
-  // Rayon des nœuds adaptatif — entre 28 et 44 px
-  const nodeR  = Math.max(28, Math.min(44, Math.min(w, h) * 0.075))
-  // Rayon du nœud central
-  const centerR = nodeR * 1.4
-
-  function getPos(i) {
-    const angle = (2 * Math.PI * i / n) - Math.PI / 2
-    return {
-      x: cx + radius * Math.cos(angle),
-      y: cy + radius * Math.sin(angle),
-    }
-  }
-
-  const selectedModule = MODULES.find(m => m.id === selected) ?? null
+// ---------------------------------------------------------------------------
+// Mini graphique barres SVG — 7 derniers jours
+// ---------------------------------------------------------------------------
+/**
+ * Graphique en barres des tickets créés sur les 7 derniers jours.
+ * @param {{ data: Array<{ date: string, count: number }> }} props
+ */
+function WeeklyChart({ data }) {
+  const max = Math.max(...data.map(d => d.count), 1)
+  const W = 100
+  const H = 60
+  const barW = W / data.length - 2
+  const ACCENT = '#F59E0B'
+  const DIM    = 'rgba(255,255,255,0.05)'
 
   return (
-    <div className="space-y-5">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 64 }}>
+      {data.map((d, i) => {
+        const barH = (d.count / max) * (H - 14)
+        const x    = i * (W / data.length) + 1
+        const y    = H - barH - 10
+        return (
+          <g key={i}>
+            {/* Barre de fond */}
+            <rect x={x} y={4} width={barW} height={H - 14} rx="2" fill={DIM} />
+            {/* Barre réelle */}
+            {d.count > 0 && (
+              <rect x={x} y={y} width={barW} height={barH} rx="2" fill={ACCENT} opacity={0.8} />
+            )}
+            {/* Valeur au-dessus */}
+            {d.count > 0 && (
+              <text x={x + barW / 2} y={y - 2} textAnchor="middle"
+                fontSize="4" fill={ACCENT} fontWeight="bold">
+                {d.count}
+              </text>
+            )}
+            {/* Jour en bas */}
+            <text x={x + barW / 2} y={H - 1} textAnchor="middle"
+              fontSize="4.5" fill="rgba(255,255,255,0.35)">
+              {dayLabel(d.date).slice(0, 3)}
+            </text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
 
-      {/* En-tête */}
-      <div>
-        <h1 className="text-white font-bold text-xl">Vue d'ensemble</h1>
-        <p className="text-gray-500 text-sm mt-0.5">
-          Plateforme RepairFlow — modules et intégrations
-        </p>
+// ---------------------------------------------------------------------------
+// Badge statut ticket
+// ---------------------------------------------------------------------------
+const STATUS_CFG = {
+  pending:   { label: 'En attente',    color: 'text-gray-400',   bg: 'bg-gray-400/10'  },
+  in_repair: { label: 'En réparation', color: 'text-blue-400',   bg: 'bg-blue-400/10'  },
+  ready:     { label: 'Prêt',          color: 'text-green-400',  bg: 'bg-green-400/10' },
+  delivered: { label: 'Livré',         color: 'text-purple-400', bg: 'bg-purple-400/10'},
+}
+function StatusDot({ status }) {
+  const cfg = STATUS_CFG[status] ?? STATUS_CFG.pending
+  return (
+    <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${cfg.color.replace('text-', 'bg-')}`} />
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Page principale Dashboard
+// ---------------------------------------------------------------------------
+/**
+ * Tableau de bord opérationnel — KPIs, graphique hebdomadaire, alertes stock, activité récente.
+ */
+export default function OverviewPage() {
+  const supabase = getSupabaseClient()
+
+  const [shopId,        setShopId]        = useState(null)
+  const [loading,       setLoading]       = useState(true)
+  const [refreshing,    setRefreshing]    = useState(false)
+  const [lastRefresh,   setLastRefresh]   = useState(null)
+
+  // — Données
+  const [ticketStats,   setTicketStats]   = useState({ pending: 0, in_repair: 0, ready: 0, delivered_month: 0, total: 0 })
+  const [invoiceStats,  setInvoiceStats]  = useState({ ca_month: 0, sent: 0, overdue: 0 })
+  const [weeklyData,    setWeeklyData]    = useState([])
+  const [stockAlerts,   setStockAlerts]   = useState([])
+  const [recentTickets, setRecentTickets] = useState([])
+  const [clientCount,   setClientCount]   = useState(0)
+
+  // ---------------------------------------------------------------------------
+  // Chargement des données
+  // ---------------------------------------------------------------------------
+  const loadAll = useCallback(async (sid) => {
+    if (!sid) return
+
+    const now       = new Date()
+    const startMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+
+    // Génère les 7 derniers jours
+    const days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(now)
+      d.setDate(d.getDate() - (6 - i))
+      d.setHours(0, 0, 0, 0)
+      return d.toISOString().split('T')[0]
+    })
+
+    await Promise.all([
+      // — Tickets par statut
+      (async () => {
+        const { data } = await supabase
+          .from('tickets')
+          .select('status, created_at')
+          .eq('shop_id', sid)
+
+        const all = data ?? []
+        const pending          = all.filter(t => t.status === 'pending').length
+        const in_repair        = all.filter(t => t.status === 'in_repair').length
+        const ready            = all.filter(t => t.status === 'ready').length
+        const delivered_month  = all.filter(t =>
+          t.status === 'delivered' && t.created_at >= startMonth
+        ).length
+
+        setTicketStats({ pending, in_repair, ready, delivered_month, total: all.length })
+
+        // Graphique hebdomadaire
+        const weekly = days.map(date => ({
+          date,
+          count: all.filter(t => t.created_at?.startsWith(date)).length,
+        }))
+        setWeeklyData(weekly)
+      })(),
+
+      // — Factures
+      (async () => {
+        const { data } = await supabase
+          .from('invoices')
+          .select('status, total_net, paid_at, due_at')
+          .eq('shop_id', sid)
+
+        const all = data ?? []
+        const ca_month = all
+          .filter(i => i.status === 'paid' && i.paid_at >= startMonth)
+          .reduce((s, i) => s + parseFloat(i.total_net || 0), 0)
+        const sent   = all.filter(i => i.status === 'sent').length
+        const overdue = all.filter(i =>
+          i.status === 'sent' && i.due_at && new Date(i.due_at) < now
+        ).length
+
+        setInvoiceStats({ ca_month, sent, overdue })
+      })(),
+
+      // — Alertes stock
+      (async () => {
+        const { data } = await supabase
+          .from('parts_inventory')
+          .select('id, name, qty_stock, min_stock, unit')
+          .eq('shop_id', sid)
+          .filter('qty_stock', 'lte', 'min_stock')
+          .order('qty_stock', { ascending: true })
+          .limit(5)
+
+        // Filtre côté client car lte sur colonne calculée peut ne pas marcher
+        const raw = data ?? []
+        setStockAlerts(raw.filter(p => p.qty_stock <= p.min_stock))
+      })(),
+
+      // — Tickets récents
+      (async () => {
+        const { data } = await supabase
+          .from('tickets')
+          .select('id, tracking_token, device_type, device_brand, device_model, status, created_at, clients(full_name)')
+          .eq('shop_id', sid)
+          .order('created_at', { ascending: false })
+          .limit(6)
+
+        setRecentTickets(data ?? [])
+      })(),
+
+      // — Nombre de clients
+      (async () => {
+        const { count } = await supabase
+          .from('clients')
+          .select('id', { count: 'exact', head: true })
+          .eq('shop_id', sid)
+        setClientCount(count ?? 0)
+      })(),
+    ])
+
+    setLastRefresh(new Date())
+  }, [supabase])
+
+  // ---------------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data: shop } = await supabase
+        .from('shops').select('id').eq('owner_id', user.id).maybeSingle()
+      if (!shop) { setLoading(false); return }
+      setShopId(shop.id)
+      await loadAll(shop.id)
+      setLoading(false)
+    }
+    init()
+  }, [])
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await loadAll(shopId)
+    setRefreshing(false)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Loading state
+  // ---------------------------------------------------------------------------
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-7 h-7 text-amber-400 animate-spin" />
       </div>
+    )
+  }
 
-      {/* ── Diagramme orbital ── */}
-      <div
-        ref={containerRef}
-        className="relative w-full bg-[#111118] rounded-2xl border border-white/10 overflow-hidden select-none"
-        style={{ height: '520px' }}
-        onClick={() => setSelected(null)}
-      >
+  // Tickets en cours (pending + in_repair + ready)
+  const ticketsOpen = ticketStats.pending + ticketStats.in_repair + ticketStats.ready
 
-        {/* Halo ambiant du centre */}
-        <div
-          className="absolute rounded-full pointer-events-none"
-          style={{
-            width:  radius * 2,
-            height: radius * 2,
-            left:   cx - radius,
-            top:    cy - radius,
-            background: 'radial-gradient(circle, rgba(245,158,11,0.04) 0%, transparent 70%)',
-          }}
-        />
+  return (
+    <div className="space-y-6">
 
-        {/* Lignes SVG — dashed au repos, solide si actif */}
-        <svg
-          className="absolute inset-0 pointer-events-none"
-          width={w}
-          height={h}
-        >
-          {MODULES.map((mod, i) => {
-            const { x, y } = getPos(i)
-            const isActive  = mod.id === selected
-            // Raccourcit la ligne pour ne pas entrer dans le nœud
-            const dx      = x - cx
-            const dy      = y - cy
-            const len     = Math.sqrt(dx * dx + dy * dy) || 1
-            const x1Off   = cx + (dx / len) * centerR
-            const y1Off   = cy + (dy / len) * centerR
-            const x2Off   = x  - (dx / len) * nodeR
-            const y2Off   = y  - (dy / len) * nodeR
-            return (
-              <line
-                key={mod.id}
-                x1={x1Off} y1={y1Off}
-                x2={x2Off} y2={y2Off}
-                stroke={isActive ? mod.color : 'rgba(255,255,255,0.1)'}
-                strokeWidth={isActive ? 1.5 : 1}
-                strokeDasharray={isActive ? undefined : '5 4'}
-                style={{ transition: 'stroke 0.25s, stroke-width 0.25s' }}
-              />
-            )
-          })}
-        </svg>
-
-        {/* ── Nœud central ── */}
-        <button
-          className="absolute flex flex-col items-center justify-center rounded-full
-                     bg-[#1A1A28] border-2 transition-colors cursor-pointer"
-          style={{
-            width:       centerR * 2,
-            height:      centerR * 2,
-            left:        cx - centerR,
-            top:         cy - centerR,
-            borderColor: selected ? 'rgba(245,158,11,0.35)' : 'rgba(245,158,11,0.25)',
-            boxShadow:   '0 0 32px rgba(245,158,11,0.08)',
-          }}
-          onClick={e => { e.stopPropagation(); setSelected(null) }}
-        >
-          <div className="w-7 h-7 bg-amber-500/20 rounded-lg flex items-center justify-center mb-0.5">
-            <Wrench className="w-3.5 h-3.5 text-amber-400" />
-          </div>
-          <span className="text-white font-bold" style={{ fontSize: Math.max(9, nodeR * 0.28) }}>
-            RepairFlow
-          </span>
-          <span className="text-gray-500" style={{ fontSize: Math.max(7, nodeR * 0.21) }}>
-            Plateforme
-          </span>
-        </button>
-
-        {/* ── Nœuds des modules ── */}
-        {MODULES.map((mod, i) => {
-          const { x, y } = getPos(i)
-          const isActive  = mod.id === selected
-          const emojiSize = Math.max(14, nodeR * 0.6)
-          const labelSize = Math.max(8, nodeR * 0.27)
-
-          return (
-            <button
-              key={mod.id}
-              onClick={e => { e.stopPropagation(); setSelected(isActive ? null : mod.id) }}
-              className="absolute flex flex-col items-center justify-center rounded-full
-                         transition-all duration-200 cursor-pointer"
-              style={{
-                width:      nodeR * 2,
-                height:     nodeR * 2,
-                left:       x - nodeR,
-                top:        y - nodeR,
-                background: isActive ? mod.bg : 'rgba(255,255,255,0.04)',
-                border:     `2px solid ${isActive ? mod.color : 'rgba(255,255,255,0.1)'}`,
-                boxShadow:  isActive ? `0 0 18px ${mod.color}44` : 'none',
-                transform:  isActive ? 'scale(1.12)' : 'scale(1)',
-              }}
-              title={mod.label}
-            >
-              <span style={{ fontSize: emojiSize, lineHeight: 1 }}>{mod.emoji}</span>
-              <span
-                className="font-medium text-center leading-tight mt-0.5 px-1"
-                style={{
-                  fontSize:  labelSize,
-                  color:     isActive ? mod.color : '#9CA3AF',
-                  maxWidth:  nodeR * 2.2,
-                  overflow:  'hidden',
-                  display:   '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                }}
-              >
-                {mod.label}
-              </span>
-            </button>
-          )
-        })}
-
-        {/* Légende statuts en bas à droite */}
-        <div className="absolute bottom-3 right-4 flex items-center gap-3">
-          {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
-            <div key={key} className="flex items-center gap-1.5">
-              <span className={`w-1.5 h-1.5 rounded-full ${cfg.color.replace('text-', 'bg-')}`} />
-              <span className="text-[10px] text-gray-600">{cfg.label}</span>
-            </div>
-          ))}
+      {/* ── En-tête ── */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-white font-bold text-xl flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-amber-400" />
+            Tableau de bord
+          </h1>
+          {lastRefresh && (
+            <p className="text-gray-600 text-xs mt-0.5">
+              Actualisé à {lastRefresh.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          )}
         </div>
+        <button onClick={handleRefresh} disabled={refreshing}
+          className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10
+                     border border-white/10 rounded-lg text-gray-400 text-xs transition-colors
+                     disabled:opacity-50">
+          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+          Actualiser
+        </button>
       </div>
 
-      {/* ── Panneau de détail ── */}
-      {selectedModule ? (
-        <div
-          className="bg-[#111118] rounded-xl border p-5"
-          style={{ borderColor: selectedModule.color + '40' }}
-        >
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div className="flex items-start gap-4">
-              {/* Icône module */}
-              <div
-                className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 text-2xl"
-                style={{ background: selectedModule.bg }}
-              >
-                {selectedModule.emoji}
+      {/* ── KPI principaux ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard
+          label="Tickets ouverts"
+          value={ticketsOpen}
+          icon={Ticket}
+          color="text-blue-400"
+          bg="bg-blue-400/10"
+          sub={`${ticketStats.total} au total`}
+          href="/admin/tickets"
+        />
+        <KpiCard
+          label="En réparation"
+          value={ticketStats.in_repair}
+          icon={Wrench}
+          color="text-amber-400"
+          bg="bg-amber-400/10"
+          sub={`${ticketStats.pending} en attente`}
+          href="/admin/tickets"
+        />
+        <KpiCard
+          label="Prêts à livrer"
+          value={ticketStats.ready}
+          icon={CheckCircle2}
+          color="text-green-400"
+          bg="bg-green-400/10"
+          sub={`${ticketStats.delivered_month} livrés ce mois`}
+          href="/admin/tickets"
+        />
+        <KpiCard
+          label="CA du mois"
+          value={eur(invoiceStats.ca_month)}
+          icon={TrendingUp}
+          color="text-amber-400"
+          bg="bg-amber-400/10"
+          sub={`${invoiceStats.sent} facture${invoiceStats.sent > 1 ? 's' : ''} à encaisser`}
+          href="/admin/factures"
+        />
+      </div>
+
+      {/* ── Ligne secondaire KPIs ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard
+          label="Clients"
+          value={clientCount}
+          icon={Users}
+          color="text-purple-400"
+          bg="bg-purple-400/10"
+          href="/admin/clients"
+        />
+        <KpiCard
+          label="Factures envoyées"
+          value={invoiceStats.sent}
+          icon={Receipt}
+          color="text-blue-400"
+          bg="bg-blue-400/10"
+          href="/admin/factures"
+        />
+        <KpiCard
+          label="Factures en retard"
+          value={invoiceStats.overdue}
+          icon={Clock}
+          color={invoiceStats.overdue > 0 ? 'text-red-400' : 'text-gray-500'}
+          bg={invoiceStats.overdue > 0 ? 'bg-red-400/10' : 'bg-white/5'}
+          href="/admin/factures"
+        />
+        <KpiCard
+          label="Ruptures de stock"
+          value={stockAlerts.length}
+          icon={Package}
+          color={stockAlerts.length > 0 ? 'text-orange-400' : 'text-gray-500'}
+          bg={stockAlerts.length > 0 ? 'bg-orange-400/10' : 'bg-white/5'}
+          href="/admin/parts"
+        />
+      </div>
+
+      {/* ── Graphique + Alertes stock ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        {/* Activité hebdomadaire */}
+        <div className="lg:col-span-2 bg-[#111118] border border-white/10 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-white font-semibold text-sm">Activité — 7 derniers jours</h2>
+              <p className="text-gray-600 text-xs mt-0.5">Tickets créés par jour</p>
+            </div>
+            <span className="text-xs text-gray-600">
+              Total : {weeklyData.reduce((s, d) => s + d.count, 0)}
+            </span>
+          </div>
+          {weeklyData.length > 0
+            ? <WeeklyChart data={weeklyData} />
+            : <div className="h-16 flex items-center justify-center text-gray-700 text-sm">
+                Aucune donnée
               </div>
-              {/* Titre + badge + description */}
-              <div>
-                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                  <h2 className="text-white font-semibold text-base">{selectedModule.label}</h2>
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium
-                      ${STATUS_CONFIG[selectedModule.status].bg}
-                      ${STATUS_CONFIG[selectedModule.status].color}`}
-                  >
-                    {STATUS_CONFIG[selectedModule.status].label}
+          }
+        </div>
+
+        {/* Alertes stock */}
+        <div className="bg-[#111118] border border-white/10 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-orange-400" />
+              <h2 className="text-white font-semibold text-sm">Alertes stock</h2>
+            </div>
+            <Link href="/admin/parts"
+              className="text-xs text-gray-500 hover:text-white transition-colors">
+              Voir tout →
+            </Link>
+          </div>
+
+          {stockAlerts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-20 text-center">
+              <PackageCheck className="w-6 h-6 text-green-400 mb-2" />
+              <p className="text-xs text-gray-500">Stock OK — aucune alerte</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {stockAlerts.map(part => (
+                <div key={part.id}
+                  className="flex items-center justify-between gap-2 py-2 border-b border-white/5 last:border-0">
+                  <div className="min-w-0">
+                    <p className="text-gray-300 text-xs font-medium truncate">{part.name}</p>
+                    <p className="text-gray-600 text-[10px]">Min : {part.min_stock} {part.unit || 'u.'}</p>
+                  </div>
+                  <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold
+                    ${part.qty_stock <= 0
+                      ? 'bg-red-500/15 text-red-400'
+                      : 'bg-orange-500/15 text-orange-400'
+                    }`}>
+                    {part.qty_stock <= 0 ? 'Rupture' : `${part.qty_stock} restant${part.qty_stock > 1 ? 's' : ''}`}
                   </span>
                 </div>
-                <p className="text-gray-400 text-sm leading-relaxed max-w-xl">
-                  {selectedModule.desc}
-                </p>
-              </div>
+              ))}
             </div>
+          )}
+        </div>
+      </div>
 
-            {/* Bouton d'accès (uniquement pour les modules actifs) */}
-            {selectedModule.status === 'actif' && selectedModule.href !== '#' && (
-              <Link
-                href={selectedModule.href}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
-                           flex-shrink-0 transition-opacity hover:opacity-80"
-                style={{
-                  background:  selectedModule.bg,
-                  color:       selectedModule.color,
-                  border:      `1px solid ${selectedModule.color}40`,
-                }}
-              >
-                Ouvrir
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            )}
+      {/* ── Tickets récents ── */}
+      <div className="bg-[#111118] border border-white/10 rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+          <h2 className="text-white font-semibold text-sm">Tickets récents</h2>
+          <Link href="/admin/tickets"
+            className="flex items-center gap-1 text-xs text-gray-500 hover:text-white transition-colors">
+            Voir tous <ArrowRight className="w-3 h-3" />
+          </Link>
+        </div>
+
+        {recentTickets.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <Ticket className="w-8 h-8 text-gray-700 mb-2" />
+            <p className="text-sm text-gray-500">Aucun ticket pour l'instant</p>
+            <Link href="/admin/tickets"
+              className="mt-3 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-white
+                         text-xs font-semibold rounded-lg transition-colors">
+              Créer un ticket
+            </Link>
           </div>
-        </div>
-      ) : (
-        <div className="text-center py-3">
-          <p className="text-gray-600 text-sm">Cliquez sur un module pour en savoir plus</p>
-        </div>
-      )}
+        ) : (
+          <div className="divide-y divide-white/5">
+            {recentTickets.map(ticket => {
+              const cfg = STATUS_CFG[ticket.status] ?? STATUS_CFG.pending
+              const device = [ticket.device_brand, ticket.device_model].filter(Boolean).join(' ')
+                || ticket.device_type || '—'
+              return (
+                <Link key={ticket.id} href={`/admin/tickets/${ticket.id}`}
+                  className="flex items-center gap-4 px-5 py-3 hover:bg-white/3 transition-colors">
+                  {/* Numéro */}
+                  <span className="font-mono text-xs text-amber-400 flex-shrink-0 w-28 truncate">
+                    {ticket.tracking_token}
+                  </span>
+                  {/* Client + appareil */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-gray-200 text-sm font-medium truncate">
+                      {ticket.clients?.full_name || '—'}
+                    </p>
+                    <p className="text-gray-600 text-xs truncate">{device}</p>
+                  </div>
+                  {/* Statut */}
+                  <span className={`flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full
+                                   text-[10px] font-semibold ${cfg.bg} ${cfg.color}`}>
+                    <StatusDot status={ticket.status} />
+                    {cfg.label}
+                  </span>
+                  {/* Date */}
+                  <span className="flex-shrink-0 text-xs text-gray-600 hidden sm:block">
+                    {fmtDate(ticket.created_at)}
+                  </span>
+                  <ArrowRight className="w-3.5 h-3.5 text-gray-700 flex-shrink-0" />
+                </Link>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
     </div>
   )

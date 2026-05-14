@@ -3,59 +3,41 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import { getSupabaseClient } from '@/lib/supabase/client'
-import {
-  Leaf, Euro, CheckCircle2, XCircle, Send,
-  Loader2, ChevronRight, Clock
-} from 'lucide-react'
+import { Loader2, ExternalLink, AlertCircle } from 'lucide-react'
+import QRGuide             from '@/components/admin/qualirepar/QRGuide'
+import QRTicketsList       from '@/components/admin/qualirepar/QRTicketsList'
+import QREligibilityChecker from '@/components/admin/qualirepar/QREligibilityChecker'
+import QRSetup             from '@/components/admin/qualirepar/QRSetup'
 
 // ---------------------------------------------------------------------------
-// Config statuts
+// Onglets
 // ---------------------------------------------------------------------------
 
-const QR_STATUS_CONFIG = {
-  non_eligible:     { label: 'Non éligible',         color: 'text-gray-400',    bg: 'bg-gray-400/10'    },
-  eligible:         { label: 'Éligible',              color: 'text-amber-400',   bg: 'bg-amber-400/10'   },
-  support_pending:  { label: 'SMS en attente',        color: 'text-blue-400',    bg: 'bg-blue-400/10'    },
-  support_accepted: { label: 'Validé client',         color: 'text-indigo-400',  bg: 'bg-indigo-400/10'  },
-  support_refused:  { label: 'Refusé client',         color: 'text-red-400',     bg: 'bg-red-400/10'     },
-  claim_submitted:  { label: 'Dossier soumis',        color: 'text-blue-400',    bg: 'bg-blue-400/10'    },
-  claim_accepted:   { label: 'Dossier accepté',       color: 'text-green-400',   bg: 'bg-green-400/10'   },
-  claim_refused:    { label: 'Dossier refusé',        color: 'text-red-400',     bg: 'bg-red-400/10'     },
-  paid:             { label: 'Remboursé',             color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
-}
+const TABS = [
+  { id: 'guide',    label: 'Mode d\'emploi', icon: '📖' },
+  { id: 'dossiers', label: 'Mes dossiers',   icon: '📋' },
+  { id: 'checker',  label: 'Vérif. rapide',  icon: '🔍' },
+  { id: 'config',   label: 'Configuration',  icon: '⚙️'  },
+]
 
-function formatDate(d) {
-  if (!d) return '—'
-  return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
-}
+// ---------------------------------------------------------------------------
+// KPI card
+// ---------------------------------------------------------------------------
 
-/**
- * Carte KPI.
- * @param {{ label: string, value: number|string, icon: React.ElementType, color: string, bg: string, sub?: string }} props
- */
-function KpiCard({ label, value, icon: Icon, color, bg, sub }) {
+function KpiCard({ label, value, icon, sub, highlight }) {
   return (
-    <div className="bg-[#111118] rounded-xl border border-white/10 p-5">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</span>
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${bg}`}>
-          <Icon className={`w-4 h-4 ${color}`} />
-        </div>
+    <div className={`rounded-xl border p-4 text-center
+      ${highlight
+        ? 'bg-amber-500/8 border-amber-500/20'
+        : 'bg-[#111118] border-white/8'}`}>
+      <div className="text-2xl mb-1">{icon}</div>
+      <div className={`text-2xl font-bold ${highlight ? 'text-amber-400' : 'text-white'}`}>
+        {value}
       </div>
-      <p className={`text-3xl font-bold ${color}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-600 mt-1">{sub}</p>}
+      <div className="text-xs text-gray-500 mt-0.5">{label}</div>
+      {sub && <div className="text-[10px] text-gray-600 mt-0.5">{sub}</div>}
     </div>
-  )
-}
-
-function QrBadge({ status }) {
-  const cfg = QR_STATUS_CONFIG[status] ?? QR_STATUS_CONFIG.non_eligible
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${cfg.bg} ${cfg.color}`}>
-      {cfg.label}
-    </span>
   )
 }
 
@@ -63,40 +45,47 @@ function QrBadge({ status }) {
 // Page principale
 // ---------------------------------------------------------------------------
 
-export default function QualiReparDashboardPage() {
+/**
+ * Page Bonus QualiRépar — 4 onglets : mode d'emploi, dossiers, vérif rapide, configuration.
+ */
+export default function QualiReparPage() {
   const supabase = getSupabaseClient()
 
-  const [loading,  setLoading]  = useState(true)
-  const [tickets,  setTickets]  = useState([])
+  const [tab,        setTab]        = useState('guide')
+  const [stats,      setStats]      = useState(null)
+  const [shop,       setShop]       = useState(null)
+  const [shopId,     setShopId]     = useState(null)
+  const [configured, setConfigured] = useState(true)   // pas de bannière avant le chargement
+  const [loading,    setLoading]    = useState(true)
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const { data: shop } = await supabase
+      const { data: shopData } = await supabase
         .from('shops')
-        .select('id')
+        .select('id, name, qualirepar_label_num')
         .eq('owner_id', user.id)
         .single()
 
-      if (!shop) { setLoading(false); return }
+      if (shopData) {
+        setShop(shopData)
+        setShopId(shopData.id)
 
-      // Tous les tickets avec un statut QualiRépar (hors non_eligible)
-      const { data } = await supabase
-        .from('tickets')
-        .select(`
-          id, device_type, device_brand, device_model, created_at,
-          qualirepar_status, qr_montant, qr_eco_org, qr_claim_id,
-          qr_soumis_at, qr_paid_at,
-          clients!tickets_client_id_fkey ( full_name )
-        `)
-        .eq('shop_id', shop.id)
-        .neq('qualirepar_status', 'non_eligible')
-        .not('qualirepar_status', 'is', null)
-        .order('created_at', { ascending: false })
+        // Vérifie si la clé API est renseignée
+        const { data: qrCfg } = await supabase
+          .from('qualirepar_shop_config')
+          .select('active, agoraplus_key_ref')
+          .eq('shop_id', shopData.id)
+          .maybeSingle()
 
-      setTickets(data ?? [])
+        setConfigured(!!(qrCfg?.agoraplus_key_ref))
+      }
+
+      const { data: statsData } = await supabase.rpc('get_qualirepar_dashboard')
+      if (statsData) setStats(statsData)
+
       setLoading(false)
     }
     load()
@@ -110,93 +99,153 @@ export default function QualiReparDashboardPage() {
     )
   }
 
-  // KPIs
-  const eligible  = tickets.filter(t => t.qualirepar_status === 'eligible').length
-  const submitted = tickets.filter(t => ['claim_submitted', 'claim_accepted', 'paid'].includes(t.qualirepar_status)).length
-  const paid      = tickets.filter(t => t.qualirepar_status === 'paid').length
-  const refused   = tickets.filter(t => ['claim_refused', 'support_refused'].includes(t.qualirepar_status)).length
-  const totalEuro = tickets
-    .filter(t => t.qualirepar_status === 'paid' && t.qr_montant)
-    .reduce((s, t) => s + Number(t.qr_montant ?? 0), 0)
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl mx-auto">
 
-      {/* En-tête */}
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl bg-green-500/10 flex items-center justify-center">
-          <Leaf className="w-5 h-5 text-green-400" />
-        </div>
-        <div>
-          <h1 className="text-white font-bold text-xl">Bonus QualiRépar</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Suivi des dossiers AgoraPlus</p>
-        </div>
-      </div>
-
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Éligibles"       value={eligible}  icon={CheckCircle2} color="text-amber-400"   bg="bg-amber-400/10"   sub="À soumettre" />
-        <KpiCard label="Soumis"          value={submitted} icon={Send}         color="text-blue-400"    bg="bg-blue-400/10"    sub="Chez AgoraPlus" />
-        <KpiCard label="Remboursés"      value={paid}      icon={Euro}         color="text-emerald-400" bg="bg-emerald-400/10" sub={`${totalEuro} € récupérés`} />
-        <KpiCard label="Refusés"         value={refused}   icon={XCircle}      color="text-red-400"     bg="bg-red-400/10"     sub="Dossiers non validés" />
-      </div>
-
-      {/* Tableau */}
-      <div className="bg-[#111118] rounded-xl border border-white/10">
-        <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-            <Leaf className="w-4 h-4 text-green-400" />
-            Tous les dossiers
-          </h2>
-          <span className="text-xs text-gray-500">{tickets.length} dossier{tickets.length > 1 ? 's' : ''}</span>
-        </div>
-
-        {tickets.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-14 text-center">
-            <Leaf className="w-10 h-10 text-gray-700 mb-3" />
-            <p className="text-sm text-gray-500 mb-1">Aucun dossier QualiRépar pour le moment</p>
-            <p className="text-xs text-gray-600 mb-4">
-              Ouvrez un ticket et cliquez sur «&nbsp;Vérifier l'éligibilité&nbsp;» pour démarrer.
+      {/* ── Bannière clé manquante ── */}
+      {!configured && (
+        <button
+          type="button"
+          onClick={() => setTab('config')}
+          className="w-full flex items-center gap-3 bg-amber-500/10 border-2 border-amber-500/30
+                     border-dashed rounded-xl p-4 text-left hover:bg-amber-500/15 transition-colors"
+        >
+          <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-amber-300 font-semibold text-sm">Configuration requise</p>
+            <p className="text-amber-400/70 text-xs mt-0.5">
+              Votre clé API AgoraPlus n'est pas encore renseignée — la soumission des dossiers
+              est désactivée. Cliquez ici pour configurer.
             </p>
-            <Link href="/admin/tickets" className="text-xs text-amber-400 hover:text-amber-300 transition-colors">
-              Voir les tickets →
-            </Link>
           </div>
-        ) : (
-          <div className="divide-y divide-white/5">
-            {tickets.map(ticket => {
-              const label = [ticket.device_brand, ticket.device_model].filter(Boolean).join(' ') || ticket.device_type
-              return (
-                <Link
-                  key={ticket.id}
-                  href={`/admin/tickets/${ticket.id}`}
-                  className="flex items-center justify-between px-5 py-3.5 hover:bg-white/3 transition-colors group"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-lg bg-green-500/8 flex items-center justify-center flex-shrink-0">
-                      <Leaf className="w-3.5 h-3.5 text-green-400" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm text-gray-200 font-medium truncate">{label}</p>
-                      <p className="text-xs text-gray-500 truncate">{ticket.clients?.full_name ?? '—'}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 flex-shrink-0 ml-4">
-                    {ticket.qr_montant && (
-                      <span className="text-xs font-bold text-green-400 hidden sm:block">
-                        −{ticket.qr_montant} €
-                      </span>
-                    )}
-                    <QrBadge status={ticket.qualirepar_status} />
-                    <span className="text-xs text-gray-600 hidden md:block">{formatDate(ticket.created_at)}</span>
-                    <ChevronRight className="w-3.5 h-3.5 text-gray-700 group-hover:text-amber-400 transition-colors" />
-                  </div>
-                </Link>
-              )
-            })}
+          <span className="text-amber-400 text-xs font-semibold flex-shrink-0">Configurer →</span>
+        </button>
+      )}
+
+      {/* ── En-tête ── */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400/20 to-amber-600/20
+                          border border-amber-500/20 flex items-center justify-center text-2xl">
+            🔁
+          </div>
+          <div>
+            <h1 className="text-white font-bold text-xl">Bonus QualiRépar</h1>
+            <p className="text-gray-500 text-sm mt-0.5">
+              Gérez vos remboursements bonus réparation simplement
+            </p>
+          </div>
+        </div>
+
+        {/* Badge label si renseigné */}
+        {shop?.qualirepar_label_num && (
+          <div className="bg-green-500/8 border border-green-500/20 rounded-xl px-4 py-2.5 text-center">
+            <div className="text-xs text-green-400 font-semibold">✅ Labellisé QualiRépar</div>
+            <div className="text-xs text-green-500/70 font-mono mt-0.5">{shop.qualirepar_label_num}</div>
           </div>
         )}
       </div>
+
+      {/* ── KPIs ── */}
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <KpiCard
+            icon="✅" label="Tickets éligibles"
+            value={stats.total_eligible ?? 0}
+            sub="Depuis le début"
+          />
+          <KpiCard
+            icon="⏳" label="À soumettre"
+            value={stats.en_attente_soumission ?? 0}
+            highlight={(stats.en_attente_soumission ?? 0) > 0}
+            sub="En attente"
+          />
+          <KpiCard
+            icon="📤" label="En cours"
+            value={stats.claim_submitted ?? 0}
+            sub="Chez l'éco-organisme"
+          />
+          <KpiCard
+            icon="💰" label="Remboursé"
+            value={`${stats.montant_total_percu ?? 0} €`}
+            sub="Total perçu"
+          />
+        </div>
+      )}
+
+      {/* ── Liens rapides plateformes ── */}
+      <div className="flex flex-wrap gap-2">
+        <span className="text-xs text-gray-600 self-center mr-1">Plateformes :</span>
+        <a
+          href="https://www.e-reparateur.eco/"
+          target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                     bg-green-500/8 border border-green-500/20 text-green-400
+                     hover:bg-green-500/15 transition-colors"
+        >
+          🌱 Ecologic <ExternalLink className="w-3 h-3" />
+        </a>
+        <a
+          href="https://portail-reparateurs.ecosystem.eco/"
+          target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                     bg-blue-500/8 border border-blue-500/20 text-blue-400
+                     hover:bg-blue-500/15 transition-colors"
+        >
+          ♻️ Ecosystem <ExternalLink className="w-3 h-3" />
+        </a>
+        <a
+          href="https://www.label-qualirepar.fr/remboursement-bonus/"
+          target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                     bg-white/5 border border-white/10 text-gray-400
+                     hover:bg-white/10 transition-colors"
+        >
+          Module aiguillage <ExternalLink className="w-3 h-3" />
+        </a>
+      </div>
+
+      {/* ── Onglets ── */}
+      <div className="flex gap-1 bg-white/3 border border-white/8 rounded-xl p-1">
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3
+                        rounded-lg text-sm font-medium transition-all relative
+                        ${tab === t.id
+                          ? 'bg-amber-500 text-gray-900 shadow-sm'
+                          : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            <span className="hidden sm:inline">{t.icon}</span>
+            {t.label}
+            {/* Point rouge si config manquante */}
+            {t.id === 'config' && !configured && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full
+                               border-2 border-[#0F0F1A]" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Contenu onglets ── */}
+      {tab === 'guide'    && <QRGuide />}
+      {tab === 'dossiers' && <QRTicketsList />}
+      {tab === 'checker'  && (
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500">
+            Vérifiez rapidement si un appareil est éligible au bonus QualiRépar
+            avant de créer un ticket.
+          </p>
+          <QREligibilityChecker />
+        </div>
+      )}
+      {tab === 'config' && (
+        <QRSetup
+          shopId={shopId}
+          onConfigSaved={() => setConfigured(true)}
+        />
+      )}
 
     </div>
   )

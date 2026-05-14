@@ -123,7 +123,29 @@
       "Bash(Select-Object Name, DriverName, PortName)",
       "Bash(Format-Table -AutoSize)",
       "PowerShell(Get-PnpDevice | Where-Object {$_.Status -eq \"Unknown\" -or $_.Status -eq \"Error\"} | Select-Object Status, Class, FriendlyName, InstanceId | Format-Table -AutoSize)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3002/admin/commandes)",
+      "Read(//c/Users/HP/AppData/Roaming/Claude/local-agent-mode-sessions/skills-plugin/3a4fd635-923c-48d7-8412-5dfacf4befe6/6388fa31-fdde-4342-948c-aebfd19548b8/skills/xlsx/**)",
+      "Bash(python -c \"import openpyxl, pandas; print\\('OK'\\)\")",
+      "Bash(python3 -c \"import openpyxl, pandas; print\\('OK'\\)\")",
+      "Bash(py -c \"import openpyxl, pandas; print\\('OK'\\)\")",
+      "Bash(where python *)",
+      "Bash(where python3 *)",
+      "Read(//usr/**)",
+      "Read(//usr/local/**)",
+      "Read(//mnt/c/Users/HP/AppData/Local/Programs/**)",
+      "Bash(ls /c/Python*)",
+      "Read(//mnt/c/Users/**)",
+      "Bash(node -e \"require\\('exceljs'\\); console.log\\('exceljs OK'\\)\")",
+      "Bash(node -e \"require\\('xlsx'\\); console.log\\('xlsx OK'\\)\")",
+      "Bash(node -e \"require\\('exceljs'\\); console.log\\('OK'\\)\")",
+      "Bash(node \"C:\\\\Users\\\\HP\\\\Desktop\\\\generate_catalogue.js\")",
+      "Bash(npm init *)",
+      "Bash(node generate_catalogue.js)",
+      "Bash(powershell.exe -Command \"\\(Get-Item 'C:\\\\Users\\\\HP\\\\Desktop\\\\catalogue_pieces_detachees.xlsx'\\).length / 1MB\")",
+      "Bash(mkdir -p \"C:\\\\Users\\\\HP\\\\Desktop\\\\projet\\\\app\\\\api\\\\invoices\\\\[id]\\\\pdf\")",
+      "Bash(mkdir -p \"C:\\\\Users\\\\HP\\\\Desktop\\\\projet\\\\app\\\\api\\\\invoices\\\\[id]\\\\send\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3002)"
     ]
   }
 }

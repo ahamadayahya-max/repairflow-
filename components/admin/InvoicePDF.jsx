@@ -199,6 +199,54 @@ const s = StyleSheet.create({
     fontSize: 8,
     color:    GRAY,
   },
+
+  // Annexe photos
+  annexeTitle: {
+    fontSize:   16,
+    fontFamily: 'Helvetica-Bold',
+    color:      DARK,
+    marginBottom: 4,
+  },
+  annexeSubtitle: {
+    fontSize:  9,
+    color:     GRAY,
+    marginBottom: 24,
+  },
+  photoSection: {
+    marginBottom: 20,
+  },
+  photoSectionTitle: {
+    fontSize:   10,
+    fontFamily: 'Helvetica-Bold',
+    color:      AMBER,
+    marginBottom: 8,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FEF3C7',
+  },
+  photoGrid: {
+    flexDirection: 'row',
+    flexWrap:      'wrap',
+    gap:           8,
+  },
+  photoItem: {
+    width:  '48%',
+    marginBottom: 8,
+  },
+  photoImg: {
+    width:  '100%',
+    height: 160,
+    objectFit: 'cover',
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  photoCaption: {
+    fontSize: 7,
+    color:    GRAY,
+    marginTop: 3,
+    textAlign: 'center',
+  },
 })
 
 // ---------------------------------------------------------------------------
@@ -221,15 +269,17 @@ function fmtEur(val) {
 
 /**
  * Facture PDF générée côté client avec @react-pdf/renderer.
+ * Inclut une annexe photos si des photos avant/après/QualiRépar sont présentes.
  *
  * @param {{
  *   ticket: object,
  *   shop: object,
  *   client: object,
  *   ticketParts: Array<object>,
+ *   photos?: Array<{ url: string, thumbnail_url: string, type: string, taken_at: string }>,
  * }} props
  */
-export default function InvoicePDF({ ticket, shop, client, ticketParts = [] }) {
+export default function InvoicePDF({ ticket, shop, client, ticketParts = [], photos = [] }) {
   const ref       = `RF-${(ticket.id ?? '').slice(0, 8).toUpperCase()}`
   const dateDoc   = fmtDate(ticket.closed_at)
   const clientName = [client?.first_name, client?.last_name].filter(Boolean).join(' ')
@@ -262,6 +312,21 @@ export default function InvoicePDF({ ticket, shop, client, ticketParts = [] }) {
   // QualiRépar
   const qrEligible = ticket.qr_eligible && ticket.qr_montant > 0
   const netApres   = totalTTC - (ticket.qr_montant ?? 0)
+
+  // Photos pour l'annexe — uniquement avant, après et QualiRépar
+  const ANNEXE_TYPES = ['before', 'after', 'qualirepar']
+  const PHOTO_LABELS = {
+    before:     'Avant réparation',
+    after:      'Après réparation',
+    qualirepar: 'Preuve QualiRépar',
+  }
+  const annexePhotos = photos.filter(p => ANNEXE_TYPES.includes(p.type))
+  const photosGrouped = ANNEXE_TYPES.reduce((acc, t) => {
+    const list = annexePhotos.filter(p => p.type === t)
+    if (list.length > 0) acc[t] = list
+    return acc
+  }, {})
+  const hasAnnexe = annexePhotos.length > 0
 
   return (
     <Document>
@@ -371,6 +436,64 @@ export default function InvoicePDF({ ticket, shop, client, ticketParts = [] }) {
         </View>
 
       </Page>
+
+      {/* ── Annexe photos (optionnelle) ── */}
+      {hasAnnexe && (
+        <Page size="A4" style={s.page}>
+
+          {/* En-tête annexe */}
+          <View style={[s.header, { marginBottom: 16 }]}>
+            <View>
+              <Text style={s.annexeTitle}>Annexe photos</Text>
+              <Text style={s.annexeSubtitle}>
+                Facture N° {`RF-${(ticket.id ?? '').slice(0, 8).toUpperCase()}`}
+                {' — '}{shop.name ?? 'RepairFlow'}
+              </Text>
+            </View>
+            <View>
+              <Text style={[s.invoiceRef, { fontSize: 9 }]}>
+                {annexePhotos.length} photo{annexePhotos.length > 1 ? 's' : ''} jointe{annexePhotos.length > 1 ? 's' : ''}
+              </Text>
+            </View>
+          </View>
+
+          {/* Sections par type */}
+          {Object.entries(photosGrouped).map(([type, list]) => (
+            <View key={type} style={s.photoSection}>
+              <Text style={s.photoSectionTitle}>
+                {PHOTO_LABELS[type] ?? type}
+              </Text>
+              <View style={s.photoGrid}>
+                {list.map((photo, i) => (
+                  <View key={i} style={s.photoItem}>
+                    <Image
+                      src={photo.url}
+                      style={s.photoImg}
+                    />
+                    <Text style={s.photoCaption}>
+                      {new Date(photo.taken_at).toLocaleDateString('fr-FR', {
+                        day: '2-digit', month: 'short', year: 'numeric',
+                      })}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ))}
+
+          {/* Pied de page */}
+          <View style={s.footer} fixed>
+            <Text style={s.footerText}>
+              Annexe photos — {shop.name ?? 'RepairFlow'}
+            </Text>
+            <Text style={s.footerText}>
+              repairflow-app.vercel.app/suivi/{ticket.tracking_token}
+            </Text>
+          </View>
+
+        </Page>
+      )}
+
     </Document>
   )
 }

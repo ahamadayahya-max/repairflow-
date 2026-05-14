@@ -2,123 +2,113 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getSupabaseClient } from '@/lib/supabase/client'
-import LineItemsEditor from '@/components/admin/LineItemsEditor'
-import PaymentModal from '@/components/admin/PaymentModal'
 import {
-  ArrowLeft, Save, Download, Send, Loader2, CreditCard,
-  CheckCircle2, Receipt, User, StickyNote,
+  ArrowLeft, Receipt, Loader2, Download, Send, CheckCircle2,
+  XCircle, Trash2, Plus, Save, Clock,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
 const STATUS_CFG = {
-  draft:     { label: 'Brouillon',  color: 'text-gray-400',  bg: 'bg-gray-400/10'  },
-  sent:      { label: 'Envoyée',    color: 'text-blue-400',  bg: 'bg-blue-400/10'  },
-  paid:      { label: 'Payée',      color: 'text-green-400', bg: 'bg-green-400/10' },
-  partial:   { label: 'Partiel',    color: 'text-amber-400', bg: 'bg-amber-400/10' },
-  overdue:   { label: 'En retard',  color: 'text-red-400',   bg: 'bg-red-400/10'   },
-  cancelled: { label: 'Annulée',    color: 'text-gray-600',  bg: 'bg-gray-600/10'  },
+  draft:     { label: 'Brouillon', color: 'text-gray-400',  bg: 'bg-gray-400/10'  },
+  sent:      { label: 'Envoyée',   color: 'text-blue-400',  bg: 'bg-blue-400/10'  },
+  paid:      { label: 'Payée',     color: 'text-green-400', bg: 'bg-green-400/10' },
+  cancelled: { label: 'Annulée',   color: 'text-red-400',   bg: 'bg-red-400/10'   },
 }
 
 function eur(n) {
-  return Number(n || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
+  return Number(n || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 }) + ' €'
 }
 
-const INPUT_CLS = `w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white
-                  text-sm placeholder-gray-600 focus:outline-none focus:border-amber-500/40 transition-colors`
-
-function Field({ label, children }) {
-  return (
-    <div>
-      <label className="block text-xs text-gray-500 mb-1.5 uppercase tracking-wide">{label}</label>
-      {children}
-    </div>
-  )
-}
+const INPUT = `w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm
+               placeholder-gray-600 focus:outline-none focus:border-amber-500/50`
 
 // ---------------------------------------------------------------------------
-// Page édition facture
+// Page détail facture
 // ---------------------------------------------------------------------------
-
-export default function InvoiceDetailPage() {
+/**
+ * Détail d'une facture : visualisation, édition des lignes, PDF, envoi email, paiement.
+ */
+export default function FactureDetailPage() {
   const { id }   = useParams()
+  const router   = useRouter()
   const supabase = getSupabaseClient()
 
-  const [shopId,    setShopId]    = useState(null)
-  const [clients,   setClients]   = useState([])
-  const [loading,   setLoading]   = useState(true)
-  const [saving,    setSaving]    = useState(false)
-  const [flash,     setFlash]     = useState(null)
-  const [invoice,   setInvoice]   = useState(null)
-  const [showModal, setShowModal] = useState(false)
+  const [invoice,  setInvoice]  = useState(null)
+  const [lines,    setLines]    = useState([])
+  const [shop,     setShop]     = useState(null)
+  const [loading,  setLoading]  = useState(true)
+  const [saving,   setSaving]   = useState(false)
+  const [sending,  setSending]  = useState(false)
+  const [flash,    setFlash]    = useState(null)
 
-  const [clientId,  setClientId]  = useState('')
-  const [issueDate, setIssueDate] = useState('')
-  const [dueDate,   setDueDate]   = useState('')
-  const [taxRate,   setTaxRate]   = useState('20')
-  const [discount,  setDiscount]  = useState('0')
-  const [qrDed,     setQrDed]     = useState('0')
-  const [notes,     setNotes]     = useState('')
-  const [lines,     setLines]     = useState([])
+  // Champs éditables
+  const [clientName,    setClientName]    = useState('')
+  const [clientEmail,   setClientEmail]   = useState('')
+  const [clientPhone,   setClientPhone]   = useState('')
+  const [clientAddress, setClientAddress] = useState('')
+  const [notes,         setNotes]         = useState('')
+  const [dueAt,         setDueAt]         = useState('')
+  const [tvaRate,       setTvaRate]       = useState(20)
+  const [qrBonus,       setQrBonus]       = useState(0)
 
-  // ---------------------------------------------------------------------------
-  // Chargement
-  // ---------------------------------------------------------------------------
+  useEffect(() => { loadAll() }, [id])
 
-  async function loadData(shopId) {
-    const [{ data: cls }, { data: inv }, { data: invLines }] = await Promise.all([
-      supabase.from('clients').select('id, full_name, phone, email').eq('shop_id', shopId).order('full_name'),
+  const loadAll = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const [{ data: inv }, { data: invLines }, { data: shopData }] = await Promise.all([
       supabase.from('invoices').select('*').eq('id', id).single(),
-      supabase.from('invoice_lines').select('*').eq('invoice_id', id).order('sort_order'),
+      supabase.from('invoice_lines').select('*').eq('invoice_id', id).order('created_at'),
+      supabase.from('shops').select('name, phone, address').eq('owner_id', user.id).single(),
     ])
-    setClients(cls || [])
+
     if (inv) {
       setInvoice(inv)
-      setClientId(inv.client_id || '')
-      setIssueDate(inv.issue_date || '')
-      setDueDate(inv.due_date || '')
-      setTaxRate(String(inv.tax_rate || '20'))
-      setDiscount(String(inv.discount_amount || '0'))
-      setQrDed(String(inv.qr_deduction || '0'))
+      setClientName(inv.client_name || '')
+      setClientEmail(inv.client_email || '')
+      setClientPhone(inv.client_phone || '')
+      setClientAddress(inv.client_address || '')
       setNotes(inv.notes || '')
+      setDueAt(inv.due_at ? inv.due_at.split('T')[0] : '')
+      setTvaRate(parseFloat(inv.tva_rate || 20))
+      setQrBonus(parseFloat(inv.qualirepar_bonus || 0))
     }
-    setLines((invLines || []).map(l => ({ ...l, _key: l.id })))
+    setLines((invLines || []).map(l => ({ ...l })))
+    setShop(shopData)
+    setLoading(false)
   }
 
-  useEffect(() => {
-    async function init() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data: shop } = await supabase.from('shops').select('id').eq('owner_id', user.id).single()
-      if (!shop) { setLoading(false); return }
-      setShopId(shop.id)
-      await loadData(shop.id)
-      setLoading(false)
-    }
-    init()
-  }, [id])
+  // ---------------------------------------------------------------------------
+  // Calculs en temps réel
+  // ---------------------------------------------------------------------------
+  const subtotalHT = lines.reduce((s, l) =>
+    s + parseFloat(l.unit_price_ht || 0) * parseInt(l.qty || 1), 0)
+  const tvaAmount  = parseFloat((subtotalHT * tvaRate / 100).toFixed(2))
+  const totalTTC   = parseFloat((subtotalHT + tvaAmount).toFixed(2))
+  const totalNet   = parseFloat((totalTTC - qrBonus).toFixed(2))
 
   // ---------------------------------------------------------------------------
-  // Calculs
+  // Gestion des lignes
   // ---------------------------------------------------------------------------
+  const addLine = () =>
+    setLines(l => [...l, { _new: true, description: '', qty: 1, unit_price_ht: 0, tva_rate: tvaRate }])
 
-  const subtotal  = lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unit_price) || 0), 0)
-  const discountN = Number(discount || 0)
-  const totalHT   = subtotal - discountN
-  const taxRateN  = Number(taxRate || 20)
-  const tva       = totalHT * taxRateN / 100
-  const totalTTC  = totalHT + tva
-  const qrN       = Number(qrDed || 0)
-  const totalNet  = totalTTC - qrN
-  const resteDu   = Math.max(0, totalNet - Number(invoice?.amount_paid || 0))
+  const removeLine = idx => setLines(l => l.filter((_, i) => i !== idx))
 
-  function showFlash(type, msg) {
+  const updateLine = (idx, field, val) =>
+    setLines(l => l.map((line, i) => i === idx ? { ...line, [field]: val } : line))
+
+  // ---------------------------------------------------------------------------
+  // Flash
+  // ---------------------------------------------------------------------------
+  function flash_(type, msg) {
     setFlash({ type, msg })
     setTimeout(() => setFlash(null), 4000)
   }
@@ -126,279 +116,406 @@ export default function InvoiceDetailPage() {
   // ---------------------------------------------------------------------------
   // Sauvegarde
   // ---------------------------------------------------------------------------
-
-  const handleSave = useCallback(async (statusOverride) => {
-    if (!shopId) return
+  const handleSave = async (statusOverride) => {
     setSaving(true)
     try {
-      const labourCost = lines.filter(l => l.line_type === 'labour')
-        .reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unit_price) || 0), 0)
-      const partsCost = lines.filter(l => l.line_type !== 'labour')
-        .reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unit_price) || 0), 0)
-
-      const payload = {
-        client_id:       clientId || null,
-        issue_date:      issueDate,
-        due_date:        dueDate || null,
-        labour_cost:     labourCost,
-        parts_cost:      partsCost,
-        discount_amount: discountN,
-        qr_deduction:    qrN,
-        tax_rate:        taxRateN,
-        notes:           notes.trim() || null,
+      const updates = {
+        client_name:      clientName,
+        client_email:     clientEmail || null,
+        client_phone:     clientPhone || null,
+        client_address:   clientAddress || null,
+        notes:            notes || null,
+        due_at:           dueAt ? new Date(dueAt).toISOString() : null,
+        tva_rate:         tvaRate,
+        tva_amount:       tvaAmount,
+        subtotal_ht:      parseFloat(subtotalHT.toFixed(2)),
+        total_ttc:        totalTTC,
+        qualirepar_bonus: qrBonus,
+        total_net:        totalNet,
+        updated_at:       new Date().toISOString(),
       }
-      if (statusOverride) payload.status = statusOverride
+      if (statusOverride) updates.status = statusOverride
 
-      const { error: invErr } = await supabase.from('invoices').update(payload).eq('id', id)
+      const { error: invErr } = await supabase
+        .from('invoices').update(updates).eq('id', id)
       if (invErr) throw invErr
 
+      // Recréer les lignes
       await supabase.from('invoice_lines').delete().eq('invoice_id', id)
-      if (lines.length) {
-        const { error: lErr } = await supabase.from('invoice_lines').insert(
-          lines.map((l, i) => ({
-            invoice_id:  id,
-            description: l.description || '',
-            quantity:    Number(l.quantity) || 1,
-            unit_price:  Number(l.unit_price) || 0,
-            line_type:   l.line_type || 'labour',
-            part_id:     l.part_id || null,
-            sort_order:  i,
-          }))
-        )
+      const linesData = lines
+        .filter(l => l.description?.trim())
+        .map(l => ({
+          invoice_id:    id,
+          description:   l.description,
+          qty:           parseInt(l.qty) || 1,
+          unit_price_ht: parseFloat(l.unit_price_ht) || 0,
+          tva_rate:      parseFloat(l.tva_rate) || tvaRate,
+        }))
+      if (linesData.length) {
+        const { error: lErr } = await supabase.from('invoice_lines').insert(linesData)
         if (lErr) throw lErr
       }
 
-      setInvoice(i => ({ ...i, ...payload }))
-      showFlash('success', 'Facture enregistrée')
+      await loadAll()
+      flash_('success', statusOverride ? `Statut → ${STATUS_CFG[statusOverride]?.label}` : 'Sauvegardé ✓')
     } catch (err) {
-      showFlash('error', err.message)
+      flash_('error', err.message)
     } finally {
       setSaving(false)
     }
-  }, [shopId, clientId, issueDate, dueDate, taxRateN, discountN, qrN, notes, lines, id])
+  }
 
   // ---------------------------------------------------------------------------
   // Télécharger PDF
   // ---------------------------------------------------------------------------
+  const handleDownloadPDF = async () => {
+    // Sauvegarde d'abord pour que le PDF soit à jour
+    await handleSave()
+    window.open(`/api/invoices/${id}/pdf`, '_blank')
+  }
 
-  async function handleDownloadPDF() {
+  // ---------------------------------------------------------------------------
+  // Envoyer par email
+  // ---------------------------------------------------------------------------
+  const handleSendEmail = async () => {
+    if (!clientEmail) { flash_('error', 'Aucun email client renseigné'); return }
+    setSending(true)
     try {
-      const clientData = clients.find(c => c.id === clientId) || {}
-      const { data: shopData } = await supabase
-        .from('shops').select('name, address, phone, email').eq('id', shopId).single()
-
-      const [{ default: InvoicePDF }, { pdf }, { createElement }] = await Promise.all([
-        import('@/components/admin/pdf/InvoicePDF'),
-        import('@react-pdf/renderer'),
-        import('react'),
-      ])
-      const blob = await pdf(createElement(InvoicePDF, {
-        invoice: { ...invoice, discount_amount: discountN, tax_rate: taxRateN, notes, qr_deduction: qrN },
-        lines, shop: shopData || {}, client: clientData,
-      })).toBlob()
-
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url; a.download = `facture-${invoice?.invoice_number}.pdf`; a.click()
-      URL.revokeObjectURL(url)
+      await handleSave('sent')
+      const res  = await fetch(`/api/invoices/${id}/send`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      flash_('success', `Email envoyé à ${clientEmail} ✓`)
     } catch (err) {
-      showFlash('error', 'Erreur PDF : ' + err.message)
+      flash_('error', err.message)
+    } finally {
+      setSending(false)
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Marquer payée / annulée
+  // ---------------------------------------------------------------------------
+  const handleMarkPaid = () => handleSave('paid').then(() => {
+    supabase.from('invoices').update({ paid_at: new Date().toISOString() }).eq('id', id)
+  })
+
+  const handleCancel = () => {
+    if (!confirm(`Annuler la facture ${invoice?.invoice_number} ?`)) return
+    handleSave('cancelled')
   }
 
   // ---------------------------------------------------------------------------
   // Rendu
   // ---------------------------------------------------------------------------
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-7 h-7 text-amber-400 animate-spin" />
+      </div>
+    )
+  }
 
-  if (loading) return (
-    <div className="flex items-center justify-center min-h-[400px]">
-      <Loader2 className="w-7 h-7 text-amber-400 animate-spin" />
-    </div>
-  )
+  if (!invoice) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px]">
+        <p className="text-gray-500 text-sm">Facture introuvable</p>
+        <Link href="/admin/factures" className="mt-3 text-amber-400 text-sm hover:text-amber-300">
+          ← Retour aux factures
+        </Link>
+      </div>
+    )
+  }
 
-  if (!invoice) return (
-    <div className="flex flex-col items-center justify-center min-h-[400px]">
-      <p className="text-gray-500">Facture introuvable</p>
-      <Link href="/admin/factures" className="mt-3 text-amber-400 text-sm hover:text-amber-300">
-        ← Retour aux factures
-      </Link>
-    </div>
-  )
-
-  const cfg = STATUS_CFG[invoice.status] || STATUS_CFG.draft
+  const cfg = STATUS_CFG[invoice.status] ?? STATUS_CFG.draft
 
   return (
-    <div className="space-y-5 max-w-4xl">
+    <div className="space-y-6 max-w-4xl">
+
+      {/* Flash */}
       {flash && (
-        <div className={`fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl text-sm font-medium shadow-lg
-          ${flash.type === 'success' ? 'bg-green-500/20 text-green-300 border border-green-500/30' : 'bg-red-500/20 text-red-300 border border-red-500/30'}`}>
+        <div className={`fixed top-4 right-4 z-50 px-4 py-2.5 rounded-xl text-sm font-medium shadow-xl
+          ${flash.type === 'success'
+            ? 'bg-green-500/20 border border-green-500/30 text-green-300'
+            : 'bg-red-500/20 border border-red-500/30 text-red-300'}`}>
           {flash.msg}
         </div>
       )}
 
-      {showModal && invoice && (
-        <PaymentModal
-          invoice={{ ...invoice, total_net: totalNet }}
-          isOpen={showModal}
-          onClose={() => setShowModal(false)}
-          onSuccess={async () => {
-            setShowModal(false)
-            if (shopId) { await loadData(shopId); setLoading(false) }
-          }}
-        />
-      )}
+      {/* Lien retour */}
+      <Link href="/admin/factures"
+        className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-white transition-colors">
+        <ArrowLeft className="w-4 h-4" /> Factures
+      </Link>
 
       {/* En-tête */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-3">
-          <Link href="/admin/factures" className="p-2 text-gray-500 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
-          <div>
-            <h1 className="text-white font-bold text-lg flex items-center gap-2">
-              <Receipt className="w-4 h-4 text-amber-400" />
-              {invoice.invoice_number}
-            </h1>
-            <span className={`text-xs px-2 py-0.5 rounded-full mt-0.5 inline-block ${cfg.bg} ${cfg.color}`}>
-              {cfg.label}
-            </span>
-          </div>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-white font-bold text-xl flex items-center gap-2">
+            <Receipt className="w-5 h-5 text-amber-400" />
+            {invoice.invoice_number}
+          </h1>
+          <span className={`inline-flex items-center gap-1 mt-1 px-2.5 py-1 rounded-lg text-xs
+                            font-semibold ${cfg.bg} ${cfg.color}`}>
+            {cfg.label}
+          </span>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={handleDownloadPDF}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-400 hover:text-white
-                       bg-white/5 border border-white/10 rounded-xl transition-colors">
+
+        {/* Actions */}
+        <div className="flex flex-wrap gap-2">
+          <button onClick={handleDownloadPDF} disabled={saving}
+            className="flex items-center gap-1.5 px-3 py-2 bg-white/5 hover:bg-white/10
+                       border border-white/10 text-gray-300 text-sm rounded-lg transition-colors">
             <Download className="w-4 h-4" /> PDF
           </button>
+
           {invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
-            <button onClick={() => setShowModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm text-green-400
-                         bg-green-400/10 border border-green-400/20 rounded-xl hover:bg-green-400/20 transition-colors">
-              <CreditCard className="w-4 h-4" /> Paiement
+            <button onClick={handleSendEmail} disabled={sending || saving}
+              className="flex items-center gap-1.5 px-3 py-2 bg-blue-500/15 hover:bg-blue-500/25
+                         border border-blue-500/20 text-blue-400 text-sm rounded-lg transition-colors
+                         disabled:opacity-50">
+              {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {sending ? 'Envoi…' : 'Envoyer email'}
             </button>
           )}
+
+          {invoice.status === 'sent' && (
+            <button onClick={handleMarkPaid} disabled={saving}
+              className="flex items-center gap-1.5 px-3 py-2 bg-green-500/15 hover:bg-green-500/25
+                         border border-green-500/20 text-green-400 text-sm rounded-lg transition-colors">
+              <CheckCircle2 className="w-4 h-4" /> Marquer payée
+            </button>
+          )}
+
+          {invoice.status === 'draft' && (
+            <button onClick={handleCancel}
+              className="flex items-center gap-1.5 px-3 py-2 bg-red-500/10 hover:bg-red-500/20
+                         border border-red-500/20 text-red-400 text-sm rounded-lg transition-colors">
+              <XCircle className="w-4 h-4" /> Annuler
+            </button>
+          )}
+
           <button onClick={() => handleSave()} disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white
-                       bg-amber-500 hover:bg-amber-400 disabled:opacity-50 rounded-xl transition-colors">
+            className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-400
+                       text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             {saving ? 'Enregistrement…' : 'Enregistrer'}
           </button>
         </div>
       </div>
 
-      {/* Récap paiement si déjà payé partiellement */}
-      {Number(invoice.amount_paid) > 0 && (
-        <div className="bg-green-400/5 border border-green-400/20 rounded-xl px-5 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-green-400">
-            <CheckCircle2 className="w-4 h-4" />
-            <span>Paiement reçu : <strong>{eur(invoice.amount_paid)}</strong></span>
-          </div>
-          <span className={`text-sm font-medium ${resteDu > 0 ? 'text-amber-400' : 'text-green-400'}`}>
-            {resteDu > 0 ? `Reste dû : ${eur(resteDu)}` : 'Soldée ✓'}
-          </span>
-        </div>
-      )}
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+        {/* Colonne gauche : infos + lignes + notes */}
         <div className="lg:col-span-2 space-y-5">
 
-          {/* Client & dates */}
-          <div className="bg-[#111118] rounded-xl border border-white/10 p-5 space-y-4">
-            <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-              <User className="w-4 h-4 text-amber-400" /> Client & dates
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Field label="Client">
-                <select value={clientId} onChange={e => setClientId(e.target.value)} className={INPUT_CLS}>
-                  <option value="">— Sans client —</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-                </select>
-              </Field>
-              <Field label="Date d'émission">
-                <input type="date" value={issueDate} onChange={e => setIssueDate(e.target.value)} className={INPUT_CLS} />
-              </Field>
-              <Field label="Date d'échéance">
-                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={INPUT_CLS} />
-              </Field>
+          {/* Infos client */}
+          <div className="bg-[#111118] border border-white/10 rounded-xl p-5 space-y-4">
+            <h2 className="text-sm font-semibold text-white">Informations client</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Nom *</label>
+                <input type="text" value={clientName} onChange={e => setClientName(e.target.value)}
+                  className={INPUT} placeholder="Nom du client" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Email</label>
+                <input type="email" value={clientEmail} onChange={e => setClientEmail(e.target.value)}
+                  className={INPUT} placeholder="client@email.fr" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Téléphone</label>
+                <input type="tel" value={clientPhone} onChange={e => setClientPhone(e.target.value)}
+                  className={INPUT} placeholder="+33 6 00 00 00 00" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Adresse</label>
+                <input type="text" value={clientAddress} onChange={e => setClientAddress(e.target.value)}
+                  className={INPUT} placeholder="Adresse du client" />
+              </div>
             </div>
           </div>
 
-          {/* Lignes */}
-          <div className="bg-[#111118] rounded-xl border border-white/10 p-5 space-y-4">
-            <h2 className="text-sm font-semibold text-white">Prestations & pièces</h2>
-            <LineItemsEditor lines={lines} onChange={setLines} shopId={shopId} />
+          {/* Lignes de facture */}
+          <div className="bg-[#111118] border border-white/10 rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-white">Prestations & pièces</h2>
+              <button onClick={addLine}
+                className="flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 transition-colors">
+                <Plus className="w-3.5 h-3.5" /> Ajouter une ligne
+              </button>
+            </div>
+
+            {lines.length === 0 ? (
+              <p className="px-5 py-8 text-sm text-gray-600 text-center">
+                Aucune ligne — cliquez sur «&nbsp;Ajouter une ligne&nbsp;»
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/5">
+                      {['Désignation','Qté','P.U. HT (€)','TVA %','Total HT',''].map(h => (
+                        <th key={h} className="px-4 py-2 text-left text-[10px] font-bold text-gray-600
+                                               uppercase tracking-wider whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {lines.map((line, idx) => {
+                      const lineTotal = parseFloat(line.unit_price_ht || 0) * parseInt(line.qty || 1)
+                      return (
+                        <tr key={line.id || idx}>
+                          <td className="px-4 py-2">
+                            <input type="text" value={line.description}
+                              onChange={e => updateLine(idx, 'description', e.target.value)}
+                              placeholder="Description"
+                              className="w-full bg-transparent text-gray-200 text-sm focus:outline-none
+                                         border-b border-transparent focus:border-white/20" />
+                          </td>
+                          <td className="px-4 py-2">
+                            <input type="number" min="1" value={line.qty}
+                              onChange={e => updateLine(idx, 'qty', e.target.value)}
+                              className="w-14 bg-white/5 border border-white/10 rounded px-2 py-1
+                                         text-white text-xs text-center focus:outline-none" />
+                          </td>
+                          <td className="px-4 py-2">
+                            <input type="number" min="0" step="0.01" value={line.unit_price_ht}
+                              onChange={e => updateLine(idx, 'unit_price_ht', e.target.value)}
+                              className="w-24 bg-white/5 border border-white/10 rounded px-2 py-1
+                                         text-white text-xs focus:outline-none" />
+                          </td>
+                          <td className="px-4 py-2">
+                            <input type="number" min="0" max="100" value={line.tva_rate}
+                              onChange={e => updateLine(idx, 'tva_rate', e.target.value)}
+                              className="w-14 bg-white/5 border border-white/10 rounded px-2 py-1
+                                         text-white text-xs text-center focus:outline-none" />
+                          </td>
+                          <td className="px-4 py-2 text-gray-300 font-semibold text-xs whitespace-nowrap">
+                            {lineTotal > 0 ? `${lineTotal.toFixed(2)} €` : '—'}
+                          </td>
+                          <td className="px-4 py-2">
+                            <button onClick={() => removeLine(idx)}
+                              className="text-gray-700 hover:text-red-400 transition-colors">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* Notes */}
-          <div className="bg-[#111118] rounded-xl border border-white/10 p-5">
-            <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-              <StickyNote className="w-4 h-4 text-amber-400" /> Notes
-            </h2>
+          <div className="bg-[#111118] border border-white/10 rounded-xl p-5">
+            <label className="block text-xs text-gray-500 mb-2">Notes (visibles sur la facture)</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
-              placeholder="Notes visibles sur la facture…" className={INPUT_CLS + ' resize-none'} />
+              className={INPUT + ' resize-none'}
+              placeholder="Conditions de paiement, garantie, remarques…" />
           </div>
         </div>
 
-        {/* Totaux */}
-        <div>
-          <div className="bg-[#111118] rounded-xl border border-white/10 p-5 space-y-4 sticky top-4">
+        {/* Colonne droite : récap + totaux */}
+        <div className="space-y-4">
+          <div className="bg-[#111118] border border-white/10 rounded-xl p-5 space-y-4 sticky top-4">
             <h2 className="text-sm font-semibold text-white">Récapitulatif</h2>
-            <Field label="TVA (%)">
-              <input type="number" min="0" max="100" step="0.1" value={taxRate}
-                onChange={e => setTaxRate(e.target.value)} className={INPUT_CLS} />
-            </Field>
-            <Field label="Remise (€)">
-              <input type="number" min="0" step="0.01" value={discount}
-                onChange={e => setDiscount(e.target.value)} className={INPUT_CLS} />
-            </Field>
-            <Field label="Déduction QualiRépar (€)">
-              <input type="number" min="0" step="0.01" value={qrDed}
-                onChange={e => setQrDed(e.target.value)} className={INPUT_CLS} />
-            </Field>
+
+            {/* Dates */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Date d'émission</label>
+              <p className="text-sm text-gray-300">
+                {invoice.issued_at ? new Date(invoice.issued_at).toLocaleDateString('fr-FR') : '—'}
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Échéance</label>
+              <input type="date" value={dueAt} onChange={e => setDueAt(e.target.value)}
+                className={INPUT} />
+            </div>
+
+            {/* TVA */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Taux TVA (%)</label>
+              <input type="number" min="0" max="100" step="0.1" value={tvaRate}
+                onChange={e => setTvaRate(parseFloat(e.target.value))}
+                className={INPUT} />
+            </div>
+
+            {/* Bonus QualiRépar */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">
+                🔁 Bonus QualiRépar (€)
+                <span className="text-gray-700 font-normal ml-1">(déduit du total)</span>
+              </label>
+              <input type="number" min="0" step="0.01" value={qrBonus}
+                onChange={e => setQrBonus(parseFloat(e.target.value) || 0)}
+                className={INPUT} />
+            </div>
+
+            {/* Totaux */}
             <div className="border-t border-white/10 pt-4 space-y-2">
               <div className="flex justify-between text-sm text-gray-400">
-                <span>Sous-total HT</span><span className="tabular-nums">{eur(subtotal)}</span>
+                <span>Sous-total HT</span>
+                <span className="tabular-nums">{eur(subtotalHT)}</span>
               </div>
-              {discountN > 0 && (
-                <div className="flex justify-between text-sm text-green-400">
-                  <span>Remise</span><span className="tabular-nums">−{eur(discountN)}</span>
-                </div>
-              )}
               <div className="flex justify-between text-sm text-gray-400">
-                <span>TVA ({taxRateN}%)</span><span className="tabular-nums">{eur(tva)}</span>
+                <span>TVA ({tvaRate}%)</span>
+                <span className="tabular-nums">{eur(tvaAmount)}</span>
               </div>
               <div className="flex justify-between text-sm text-gray-300 border-t border-white/10 pt-2">
-                <span>Total TTC</span><span className="tabular-nums">{eur(totalTTC)}</span>
+                <span>Total TTC</span>
+                <span className="tabular-nums font-semibold">{eur(totalTTC)}</span>
               </div>
-              {qrN > 0 && (
+              {qrBonus > 0 && (
                 <div className="flex justify-between text-sm text-green-400">
-                  <span>Bonus QualiRépar</span><span className="tabular-nums">−{eur(qrN)}</span>
+                  <span>Bonus QualiRépar</span>
+                  <span className="tabular-nums">−{eur(qrBonus)}</span>
                 </div>
               )}
             </div>
-            <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)' }}>
+
+            {/* Net à payer */}
+            <div className="rounded-xl p-4 text-center bg-amber-500/10 border border-amber-500/20">
               <p className="text-xs text-amber-400/70 mb-1">Net à payer</p>
               <p className="text-2xl font-bold text-amber-400 tabular-nums">{eur(totalNet)}</p>
             </div>
+
+            {/* Boutons actions */}
             <button onClick={() => handleSave()} disabled={saving}
-              className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-semibold
-                         text-white bg-amber-500 hover:bg-amber-400 disabled:opacity-50 rounded-xl transition-colors">
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-500
+                         hover:bg-amber-400 text-white text-sm font-semibold rounded-lg
+                         transition-colors disabled:opacity-50">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               {saving ? 'Enregistrement…' : 'Enregistrer'}
             </button>
+
             {invoice.status === 'draft' && (
               <button onClick={() => handleSave('sent')} disabled={saving}
-                className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium
-                           text-blue-400 bg-blue-400/10 hover:bg-blue-400/20 border border-blue-400/20 rounded-xl transition-colors">
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-500/15
+                           hover:bg-blue-500/25 border border-blue-500/20 text-blue-400 text-sm
+                           font-medium rounded-lg transition-colors disabled:opacity-50">
                 <Send className="w-4 h-4" /> Marquer envoyée
               </button>
             )}
-            {invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
-              <button onClick={() => setShowModal(true)}
-                className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium
-                           text-green-400 bg-green-400/10 hover:bg-green-400/20 border border-green-400/20 rounded-xl transition-colors">
-                <CreditCard className="w-4 h-4" /> Enregistrer un paiement
+
+            {invoice.status === 'sent' && (
+              <button onClick={handleMarkPaid} disabled={saving}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-green-500/15
+                           hover:bg-green-500/25 border border-green-500/20 text-green-400 text-sm
+                           font-medium rounded-lg transition-colors disabled:opacity-50">
+                <CheckCircle2 className="w-4 h-4" /> Marquer payée
               </button>
+            )}
+
+            {invoice.status === 'paid' && (
+              <div className="flex items-center justify-center gap-2 text-sm text-green-400
+                              bg-green-400/10 rounded-lg py-2.5 border border-green-400/20">
+                <CheckCircle2 className="w-4 h-4" />
+                Payée le {invoice.paid_at ? new Date(invoice.paid_at).toLocaleDateString('fr-FR') : '—'}
+              </div>
             )}
           </div>
         </div>

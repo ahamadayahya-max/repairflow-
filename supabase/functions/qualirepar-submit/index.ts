@@ -1,20 +1,32 @@
 // supabase/functions/qualirepar-submit/index.ts
 // Soumet un dossier QualiRépar à AgoraPlus :
-// 1. CreateSupportRequest → SMS validation client
+// 1. CreateSupportRequest → validation SMS client
 // 2. Upload facture → Supabase Storage
 // 3. CreateClaim → dossier de remboursement
+//
+// NOTE : toutes les erreurs métier retournent HTTP 200 avec { ok: false, error: "..." }
+// afin que le client Supabase JS puisse lire le message réel (une réponse non-2xx
+// est interceptée avant que le body soit lisible par le composant appelant).
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const AGORAPLUS_BASE = 'https://api.agoraplus.com/api'
 
-serve(async (req) => {
-  const corsHeaders = {
-    'Access-Control-Allow-Origin':  '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  }
+const corsHeaders = {
+  'Access-Control-Allow-Origin':  '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
 
+/** Réponse JSON toujours en 200 — évite que supabase-js masque le message d'erreur */
+function jsonOk(body: object) {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json', ...corsHeaders },
+  })
+}
+
+serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -25,18 +37,12 @@ serve(async (req) => {
     invoice_mime_type?:   string
   }
   try { body = await req.json() } catch {
-    return new Response(
-      JSON.stringify({ ok: false, error: 'Body JSON invalide' }),
-      { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
-    )
+    return jsonOk({ ok: false, error: 'Body JSON invalide' })
   }
 
   const { ticket_id, invoice_file_base64, invoice_mime_type = 'application/pdf' } = body
   if (!ticket_id) {
-    return new Response(
-      JSON.stringify({ ok: false, error: 'ticket_id requis' }),
-      { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
-    )
+    return jsonOk({ ok: false, error: 'ticket_id requis' })
   }
 
   const supabase = createClient(
@@ -44,7 +50,7 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   )
 
-  // ── Récupère ticket + client + config atelier ──────────────────────────
+  // ── Récupère ticket + client ───────────────────────────────────────────────
   const { data: ticket } = await supabase
     .from('tickets')
     .select(`
@@ -57,28 +63,34 @@ serve(async (req) => {
     .single()
 
   if (!ticket) {
-    return new Response(
-      JSON.stringify({ ok: false, error: 'Ticket introuvable' }),
-      { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
-    )
+    return jsonOk({ ok: false, error: 'Ticket introuvable' })
   }
 
-  // Clé API de l'atelier : d'abord variable dédiée, sinon clé globale
+  // ── Récupère la config atelier (clé API stockée dans agoraplus_key_ref) ───
+  const { data: shopConfig } = await supabase
+    .from('qualirepar_shop_config')
+    .select('active, agoraplus_key_ref')
+    .eq('shop_id', ticket.shop_id)
+    .single()
+
+  // Priorité : clé en base → variable d'env dédiée par atelier → variable globale
   const shopKeyVar = `AGORAPLUS_KEY_${ticket.shop_id.replace(/-/g, '_')}`
-  const apiKey     = Deno.env.get(shopKeyVar) ?? Deno.env.get('AGORAPLUS_API_KEY')
+  const apiKey     = shopConfig?.agoraplus_key_ref
+                  ?? Deno.env.get(shopKeyVar)
+                  ?? Deno.env.get('AGORAPLUS_API_KEY')
 
   if (!apiKey) {
-    return new Response(
-      JSON.stringify({ ok: false, error: 'Clé API AgoraPlus non configurée pour cet atelier' }),
-      { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
-    )
+    return jsonOk({
+      ok:    false,
+      error: 'Clé API AgoraPlus non configurée. Rendez-vous dans Paramètres → QualiRépar pour la saisir.',
+    })
   }
 
   const ecoOrgId = ticket.qr_eco_org === 'ecosystem' ? 45 : 44
   const headers  = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' }
   const client   = ticket.clients as any
 
-  // ── ÉTAPE 1 : CreateSupportRequest ────────────────────────────────────
+  // ── ÉTAPE 1 : CreateSupportRequest ────────────────────────────────────────
   const supportPayload = {
     EcoOrganizationId: ecoOrgId,
     RepairDate:         new Date().toISOString(),
@@ -104,10 +116,7 @@ serve(async (req) => {
     })
     supportData = await supportRes.json()
   } catch (err: any) {
-    return new Response(
-      JSON.stringify({ ok: false, error: `Erreur réseau AgoraPlus : ${err.message}` }),
-      { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
-    )
+    return jsonOk({ ok: false, error: `Erreur réseau AgoraPlus (étape 1) : ${err.message}` })
   }
 
   await supabase.from('qualirepar_api_logs').insert({
@@ -127,17 +136,17 @@ serve(async (req) => {
       p_status:        'eligible',
       p_error_message: supportData.ResponseErrorMessage ?? 'Erreur CreateSupportRequest',
     })
-    return new Response(
-      JSON.stringify({ ok: false, error: supportData.ResponseErrorMessage }),
-      { status: 422, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
-    )
+    return jsonOk({
+      ok:    false,
+      error: supportData.ResponseErrorMessage ?? 'AgoraPlus a refusé la demande (étape 1)',
+    })
   }
 
   const supportRequestId = supportData.ResponseData?.RequestId
   await supabase.rpc('update_qualirepar_status', {
-    p_ticket_id:           ticket_id,
-    p_status:              'support_pending',
-    p_support_request_id:  supportRequestId,
+    p_ticket_id:          ticket_id,
+    p_status:             'support_pending',
+    p_support_request_id: supportRequestId,
   })
 
   // ── ÉTAPE 2 : Upload facture dans Supabase Storage ─────────────────────
@@ -161,8 +170,8 @@ serve(async (req) => {
         invoiceUrl = urlData.publicUrl
       }
     } catch (err: any) {
-      console.error('[qualirepar-submit] Storage upload error:', err.message)
       // Non bloquant — on continue sans la facture
+      console.error('[qualirepar-submit] Storage upload error:', err.message)
     }
   }
 
@@ -179,10 +188,7 @@ serve(async (req) => {
     })
     claimData = await claimRes.json()
   } catch (err: any) {
-    return new Response(
-      JSON.stringify({ ok: false, error: `Erreur réseau AgoraPlus CreateClaim : ${err.message}` }),
-      { status: 502, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
-    )
+    return jsonOk({ ok: false, error: `Erreur réseau AgoraPlus (étape 3) : ${err.message}` })
   }
 
   await supabase.from('qualirepar_api_logs').insert({
@@ -202,10 +208,10 @@ serve(async (req) => {
       p_status:        'support_accepted',
       p_error_message: claimData.ResponseErrorMessage ?? 'Erreur CreateClaim',
     })
-    return new Response(
-      JSON.stringify({ ok: false, error: claimData.ResponseErrorMessage }),
-      { status: 422, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
-    )
+    return jsonOk({
+      ok:    false,
+      error: claimData.ResponseErrorMessage ?? 'AgoraPlus a refusé le dossier (étape 3)',
+    })
   }
 
   const claimId = claimData.ResponseData?.ClaimId
@@ -216,13 +222,10 @@ serve(async (req) => {
     p_invoice_url: invoiceUrl,
   })
 
-  return new Response(
-    JSON.stringify({
-      ok:                 true,
-      claim_id:           claimId,
-      support_request_id: supportRequestId,
-      invoice_url:        invoiceUrl,
-    }),
-    { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
-  )
+  return jsonOk({
+    ok:                 true,
+    claim_id:           claimId,
+    support_request_id: supportRequestId,
+    invoice_url:        invoiceUrl,
+  })
 })

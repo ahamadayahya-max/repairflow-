@@ -11,13 +11,15 @@ import AIAssistant from '@/components/admin/AIAssistant'
 import PartSearchDropdown from '@/components/admin/PartSearchDropdown'
 import BrandDropdown from '@/components/admin/BrandDropdown'
 import ModelDropdown from '@/components/admin/ModelDropdown'
+import PhotoGallery from '@/components/admin/PhotoGallery'
+import QualiReparPanel from '@/components/admin/QualiReparPanel'
 import { QRCodeSVG } from 'qrcode.react'
 import {
   ArrowLeft, Loader2, Smartphone, Laptop, Tablet,
   Tv, Package, Clock, CheckCircle2, Wrench, Truck,
   ExternalLink, AlertCircle, ChevronRight, RotateCcw, ChevronDown,
   Mail, MessageSquare, Send, Trash2, Plus, Minus, AlertTriangle,
-  QrCode, FileText, Download, Printer
+  QrCode, FileText, Download, Printer, Receipt
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -134,6 +136,13 @@ export default function TicketDetailPage() {
   // Données shop (pour la facture PDF)
   const [shop, setShop] = useState({})
 
+  // Photos du ticket (pour l'annexe PDF)
+  const [ticketPhotos, setTicketPhotos] = useState([])
+
+  // Facture liée au ticket (si déjà générée)
+  const [ticketInvoice,      setTicketInvoice]      = useState(null)
+  const [generatingInvoice,  setGeneratingInvoice]  = useState(false)
+
   // Génération PDF à la demande
   const [pdfGenerating,   setPdfGenerating]   = useState(false)
   // Impression thermique en cours
@@ -155,7 +164,12 @@ export default function TicketDetailPage() {
           id, status, device_type, device_brand, device_model,
           issue_desc, issue_description, received_at, estimated_ready_at,
           tracking_token, shop_id, intake_channel, closed_at,
-          price_estimate, price_final, qr_eligible, qr_montant, qr_eco_org,
+          price_estimate, price_final,
+          qr_eligible, qr_montant, qr_eco_org, qr_status,
+          qr_claim_id, qr_support_request_id, qr_invoice_url,
+          qr_soumis_at, qr_paid_at, qr_error_message,
+          qr_imei, qr_symptom_code, qr_repair_code,
+          photos_count, qr_photos_count,
           ifixit_device_name, ifixit_category, ifixit_subcategory,
           ifixit_image_url, ifixit_device_id,
           clients!tickets_client_id_fkey ( id, full_name, first_name, last_name, phone, email )
@@ -212,6 +226,23 @@ export default function TicketDetailPage() {
         .eq('ticket_id', id)
         .order('changed_at', { ascending: false })
       if (histData) setHistory(histData)
+
+      // Photos avant/après/QualiRépar pour l'annexe PDF
+      const { data: photosData } = await supabase
+        .from('ticket_photos')
+        .select('id, url, thumbnail_url, type, taken_at')
+        .eq('ticket_id', id)
+        .in('type', ['before', 'after', 'qualirepar'])
+        .order('taken_at', { ascending: true })
+      if (photosData) setTicketPhotos(photosData)
+
+      // Vérifie si une facture a déjà été générée pour ce ticket
+      const { data: invData } = await supabase
+        .from('invoices')
+        .select('id, invoice_number, status, total_net')
+        .eq('ticket_id', id)
+        .maybeSingle()
+      if (invData) setTicketInvoice(invData)
 
       setLoading(false)
     }
@@ -300,6 +331,54 @@ export default function TicketDetailPage() {
       setUpdating(false)
     }
   }, [id, correctionStatus, correctionReason])
+
+  // Génération automatique d'une facture depuis le ticket (avec déduction QR si éligible)
+  const generateInvoice = useCallback(async () => {
+    if (!ticket) return
+    setGeneratingInvoice(true)
+    try {
+      const { data: numData, error: numErr } = await supabase.rpc('next_document_number', {
+        p_shop_id: ticket.shop_id,
+        p_type:    'invoice',
+      })
+      if (numErr) throw numErr
+
+      const labourCost  = Number(ticket.price_final ?? ticket.price_estimate ?? 0)
+      const partsCost   = ticketParts.reduce(
+        (s, tp) => s + (Number(tp.quantity) || 0) * (Number(tp.unit_price) || 0), 0
+      )
+      const qrDeduction = (ticket.qr_eligible && ticket.qr_montant) ? Number(ticket.qr_montant) : 0
+      const today       = new Date().toISOString().split('T')[0]
+      const dueDate     = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
+      const { data: inv, error: invErr } = await supabase
+        .from('invoices')
+        .insert({
+          shop_id:        ticket.shop_id,
+          client_id:      ticket.client_id ?? ticket.contact_id,
+          ticket_id:      ticket.id,
+          invoice_number: numData,
+          labour_cost:    labourCost,
+          parts_cost:     partsCost,
+          qr_deduction:   qrDeduction,
+          tax_rate:       20,
+          // total_ht / total_ttc / total_net sont GENERATED ALWAYS AS — PostgreSQL les calcule
+          issue_date:     today,
+          due_date:       dueDate,
+          status:         'draft',
+        })
+        .select().single()
+      if (invErr) throw invErr
+
+      setTicketInvoice(inv)
+      router.push(`/admin/factures/${inv.id}`)
+    } catch (err) {
+      setUpdateMsg({ type: 'error', text: 'Erreur génération facture : ' + err.message })
+      setTimeout(() => setUpdateMsg(null), 5000)
+    } finally {
+      setGeneratingInvoice(false)
+    }
+  }, [ticket, ticketParts, supabase, router])
 
   // Suppression définitive du ticket
   const handleDelete = useCallback(async () => {
@@ -458,6 +537,7 @@ export default function TicketDetailPage() {
           shop:        shop,
           client:      ticket.clients,
           ticketParts: ticketParts,
+          photos:      ticketPhotos,
         })
       ).toBlob()
       const url  = URL.createObjectURL(blob)
@@ -474,7 +554,7 @@ export default function TicketDetailPage() {
     } finally {
       setPdfGenerating(false)
     }
-  }, [ticket, shop, ticketParts])
+  }, [ticket, shop, ticketParts, ticketPhotos])
 
   // Aperçu du PDF dans un nouvel onglet (sans téléchargement)
   const handlePreviewPDF = useCallback(async () => {
@@ -491,6 +571,7 @@ export default function TicketDetailPage() {
           shop:        shop,
           client:      ticket.clients,
           ticketParts: ticketParts,
+          photos:      ticketPhotos,
         })
       ).toBlob()
       const url = URL.createObjectURL(blob)
@@ -503,7 +584,7 @@ export default function TicketDetailPage() {
     } finally {
       setPdfGenerating(false)
     }
-  }, [ticket, shop, ticketParts])
+  }, [ticket, shop, ticketParts, ticketPhotos])
 
   // Impression du bon de dépôt client (ouvre le dialogue d'impression natif)
   const handlePrintReceipt = useCallback(async () => {
@@ -1106,6 +1187,99 @@ export default function TicketDetailPage() {
                   </div>
                 )}
               </div>
+            )}
+          </div>
+
+          {/* ── Photos de réparation ── */}
+          <div className="bg-[#111118] rounded-xl border border-white/10 p-4">
+            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+              <span>📸</span>
+              Photos
+              {ticket.photos_count > 0 && (
+                <span className="ml-auto text-[10px] px-1.5 py-0.5 bg-amber-500/15 text-amber-400 rounded-full font-semibold">
+                  {ticket.photos_count}
+                </span>
+              )}
+            </h3>
+            {ticket.shop_id && (
+              <PhotoGallery
+                ticketId={ticket.id}
+                shopId={ticket.shop_id}
+                mode="full"
+              />
+            )}
+          </div>
+
+          {/* ── QualiRépar ── */}
+          <QualiReparPanel
+            ticketId={ticket.id}
+            shopId={ticket.shop_id}
+            qualirepar_status={ticket.qr_status}
+            qr_eligible={ticket.qr_eligible}
+            qr_montant={ticket.qr_montant}
+            qr_eco_org={ticket.qr_eco_org}
+            qr_claim_id={ticket.qr_claim_id}
+            qr_support_request_id={ticket.qr_support_request_id}
+            qr_invoice_url={ticket.qr_invoice_url}
+            qr_soumis_at={ticket.qr_soumis_at}
+            qr_paid_at={ticket.qr_paid_at}
+            qr_error_message={ticket.qr_error_message}
+            qr_imei={ticket.qr_imei}
+            qr_symptom_code={ticket.qr_symptom_code}
+            qr_repair_code={ticket.qr_repair_code}
+            device_type={ticket.device_type}
+            device_brand={ticket.device_brand}
+            qr_photos_count={ticket.qr_photos_count ?? 0}
+          />
+
+          {/* ── Facturation — génération depuis le ticket ── */}
+          <div className="space-y-2">
+            {!ticketInvoice && ticket.qr_eligible && (
+              <button
+                onClick={generateInvoice}
+                disabled={generatingInvoice}
+                className="w-full flex items-center gap-3 px-4 py-4
+                           bg-amber-500/15 border border-amber-500/25
+                           hover:bg-amber-500/25 rounded-xl transition-colors
+                           disabled:opacity-50 text-left"
+              >
+                {generatingInvoice
+                  ? <Loader2 className="w-5 h-5 text-amber-400 animate-spin flex-shrink-0" />
+                  : <span className="text-xl flex-shrink-0">🧾</span>}
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-amber-300">
+                    Générer la facture avec Bonus QualiRépar
+                  </div>
+                  <div className="text-xs text-amber-400/70 mt-0.5">
+                    Réduction de {ticket.qr_montant} € appliquée automatiquement
+                  </div>
+                </div>
+                {!generatingInvoice && <ChevronRight className="w-4 h-4 text-amber-400 flex-shrink-0" />}
+              </button>
+            )}
+
+            {!ticketInvoice && !ticket.qr_eligible && (
+              <Link
+                href={`/admin/factures/nouvelle?ticket=${ticket.id}`}
+                className="flex items-center justify-center gap-2 py-2.5 text-sm font-medium
+                           text-gray-400 bg-white/5 border border-white/10
+                           hover:bg-white/10 hover:text-white rounded-xl transition-colors"
+              >
+                <Receipt className="w-4 h-4" />
+                Créer une facture
+              </Link>
+            )}
+
+            {ticketInvoice && (
+              <Link
+                href={`/admin/factures/${ticketInvoice.id}`}
+                className="flex items-center justify-center gap-2 py-2.5 text-sm font-semibold
+                           text-amber-300 bg-amber-500/10 border border-amber-500/20
+                           hover:bg-amber-500/20 rounded-xl transition-colors"
+              >
+                <Receipt className="w-4 h-4" />
+                Voir la facture {ticketInvoice.invoice_number}
+              </Link>
             )}
           </div>
 

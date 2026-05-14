@@ -53,9 +53,15 @@ function fmtDate(d) {
 /**
  * Template PDF pour une facture conforme au droit français.
  * Importé dynamiquement : import('@/components/admin/pdf/InvoicePDF')
- * @param {{ invoice: object, lines: object[], shop: object, client: object }} props
+ * @param {{
+ *   invoice: object,
+ *   lines:   object[],
+ *   shop:    object,
+ *   client:  object,
+ *   ticket?: object,  // ticket lié — pour éco-organisme et n° dossier QualiRépar
+ * }} props
  */
-export default function InvoicePDF({ invoice = {}, lines = [], shop = {}, client = {} }) {
+export default function InvoicePDF({ invoice = {}, lines = [], shop = {}, client = {}, ticket = null }) {
   const subtotal   = lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unit_price) || 0), 0)
   const discount   = Number(invoice.discount_amount || 0)
   const totalHT    = subtotal - discount
@@ -65,6 +71,11 @@ export default function InvoicePDF({ invoice = {}, lines = [], shop = {}, client
   const qrDed      = Number(invoice.qr_deduction || 0)
   const totalNet   = totalTTC - qrDed
   const hasQR      = qrDed > 0
+
+  // Données QualiRépar — depuis le ticket lié ou l'invoice
+  const ecoOrg  = ticket?.qr_eco_org  ?? invoice.qr_eco_org  ?? null
+  const claimId = ticket?.qr_claim_id ?? invoice.qr_claim_id ?? null
+  const ecoName = ecoOrg === 'ecologic' ? 'Ecologic' : ecoOrg === 'ecosystem' ? 'Ecosystem' : 'éco-organisme partenaire'
 
   const statusLabels = {
     draft:     'Brouillon',
@@ -163,21 +174,71 @@ export default function InvoicePDF({ invoice = {}, lines = [], shop = {}, client
             <Text>TVA ({taxRate}%) :</Text>
             <Text>{fmt(tva)}</Text>
           </View>
-          <View style={s.totRow}>
-            <Text>Total TTC :</Text>
+          <View style={[s.totRow, { borderTopWidth: 1, borderTopColor: c.border, paddingTop: 4, marginTop: 2 }]}>
+            <Text style={s.bold}>Total TTC :</Text>
             <Text style={s.bold}>{fmt(totalTTC)}</Text>
           </View>
+
+          {/* ── Ligne QualiRépar — bloc vert avec éco-organisme et n° dossier ── */}
           {hasQR && (
-            <View style={s.totRow}>
-              <Text style={{ color: c.green }}>Bonus QualiRépar :</Text>
-              <Text style={{ color: c.green }}>-{fmt(qrDed)}</Text>
+            <View style={{
+              backgroundColor: '#f0fdf4',
+              borderRadius: 5,
+              padding: '6 8',
+              marginTop: 6,
+              borderLeftWidth: 3,
+              borderLeftColor: c.green,
+            }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 }}>
+                <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#065f46' }}>
+                  🔁 Bonus Réparation QualiRépar
+                </Text>
+                <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', color: c.green }}>
+                  -{fmt(qrDed)}
+                </Text>
+              </View>
+              <Text style={{ fontSize: 7, color: '#6b7280' }}>
+                {'Dispositif financé par ' + ecoName + (claimId ? ' · Dossier #' + claimId : '')}
+              </Text>
             </View>
           )}
-          <View style={s.totNet}>
-            <Text style={s.totNetTxt}>Net à payer :</Text>
-            <Text style={s.totNetTxt}>{fmt(totalNet)}</Text>
+
+          {/* ── NET À PAYER — proéminent en ambré ── */}
+          <View style={[s.totNet, hasQR ? { marginTop: 8, borderTopWidth: 2, borderTopColor: '#d1d5db' } : {}]}>
+            <Text style={[s.totNetTxt, { fontSize: hasQR ? 12 : 11 }]}>NET À PAYER :</Text>
+            <Text style={[s.totNetTxt, { fontSize: hasQR ? 16 : 11 }]}>{fmt(hasQR ? totalNet : totalTTC)}</Text>
           </View>
+
+          {/* Mention "dont QR" */}
+          {hasQR && (
+            <Text style={{ fontSize: 7, color: c.green, textAlign: 'right', marginTop: 3 }}>
+              {'Dont ' + fmt(qrDed) + ' pris en charge par QualiRépar'}
+            </Text>
+          )}
         </View>
+
+        {/* ── Mention légale QualiRépar (obligatoire AGEC) ── */}
+        {hasQR && (
+          <View style={{
+            marginTop: 14,
+            padding: '7 10',
+            backgroundColor: '#f9fafb',
+            borderRadius: 5,
+            borderWidth: 1,
+            borderColor: c.border,
+          }}>
+            <Text style={{ fontSize: 8, fontFamily: 'Helvetica-Bold', color: '#374151', marginBottom: 3 }}>
+              Mention réglementaire — Bonus Réparation QualiRépar
+            </Text>
+            <Text style={{ fontSize: 7.5, color: '#6b7280', lineHeight: 1.5 }}>
+              {'Le montant de ' + fmt(qrDed) + ' correspond au Bonus Réparation déduit conformément au ' +
+               'dispositif prévu par la loi AGEC n°2020-105 et au décret n°2022-1498 relatif au fonds de réparation. ' +
+               'Ce bonus est financé par l\'éco-organisme ' + ecoName +
+               ' et remboursé directement au réparateur labellisé QualiRépar.' +
+               (claimId ? ' Référence dossier : #' + claimId + '.' : '')}
+            </Text>
+          </View>
+        )}
 
         {/* ── Notes ── */}
         {invoice.notes && (
@@ -195,11 +256,6 @@ export default function InvoicePDF({ invoice = {}, lines = [], shop = {}, client
           <Text style={s.footerText}>
             En cas de retard de paiement, des pénalités de 3× le taux directeur de la BCE seront appliquées, augmentées d'une indemnité forfaitaire de 40 € pour frais de recouvrement (art. L.441-10 du Code de commerce).
           </Text>
-          {hasQR && (
-            <Text style={s.footerText}>
-              Bonus Réparation déduit conformément à la loi AGEC n°2020-105. Éco-organisme partenaire.
-            </Text>
-          )}
           {shop.name && (
             <Text style={[s.footerText, { marginTop: 4, textAlign: 'center' }]}>
               {shop.name}{shop.address ? ` · ${shop.address}` : ''}{shop.phone ? ` · ${shop.phone}` : ''}

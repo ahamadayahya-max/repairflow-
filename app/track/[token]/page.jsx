@@ -1,5 +1,5 @@
 import { Wrench } from 'lucide-react'
-import { rpc } from '@/lib/supabase/server'
+import { rpc, from } from '@/lib/supabase/server'
 import TrackingClient from './TrackingClient'
 
 // ---------------------------------------------------------------------------
@@ -82,6 +82,27 @@ function NotFoundPage() {
  * Récupère le ticket + les infos de l'atelier via la RPC Supabase.
  * Passe les données au Client Component pour le polling et l'affichage.
  */
+/**
+ * Récupère les photos publiques avant/après d'un ticket via l'API REST PostgREST.
+ * La RLS autorise la lecture anonyme pour les types 'before' et 'after'.
+ * @param {string} ticketId
+ * @returns {Promise<Array>}
+ */
+async function fetchPublicPhotos(ticketId) {
+  try {
+    const { data } = await from('ticket_photos', {
+      select:    'id,url,thumbnail_url,type,taken_at',
+      ticket_id: `eq.${ticketId}`,
+      type:      'in.(before,after)',
+      order:     'taken_at.asc',
+    })
+    return Array.isArray(data) ? data : []
+  } catch {
+    // Les photos sont optionnelles — ne jamais bloquer la page de suivi
+    return []
+  }
+}
+
 export default async function TrackPage({ params }) {
   const { token } = await params
   const result    = await fetchTicket(token)
@@ -93,5 +114,8 @@ export default async function TrackPage({ params }) {
   const shop   = result.shop   ?? {}
   const ticket = result.ticket ?? result
 
-  return <TrackingClient ticket={ticket} shop={shop} />
+  // Charge les photos avant/après pour l'affichage sur la page de suivi
+  const photos = ticket.id ? await fetchPublicPhotos(ticket.id) : []
+
+  return <TrackingClient ticket={ticket} shop={shop} photos={photos} />
 }

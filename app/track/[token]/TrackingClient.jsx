@@ -181,12 +181,14 @@ function CancelledBanner() {
  *     address?: string,
  *     hours?: string,
  *     logo_url?: string,
- *   }
+ *   },
+ *   photos?: Array<{ id: string, url: string, thumbnail_url: string, type: 'before'|'after', taken_at: string }>,
  * }} props
  */
-export default function TrackingClient({ ticket, shop }) {
+export default function TrackingClient({ ticket, shop, photos = [] }) {
   const router  = useRouter()
-  const [elapsed, setElapsed] = useState(0)
+  const [elapsed,  setElapsed]  = useState(0)
+  const [lightbox, setLightbox] = useState(null)  // URL photo agrandie ou null
 
   // Rafraîchissement automatique toutes les 60 s
   // router.refresh() relance le Server Component sans rechargement complet
@@ -302,6 +304,66 @@ export default function TrackingClient({ ticket, shop }) {
           </div>
         )}
 
+        {/* ── Photos avant/après (visibles dès que la réparation est en cours) ── */}
+        {['in_repair', 'ready', 'delivered'].includes(status) && photos.length > 0 && (
+          <div className="px-6 py-5 border-b border-gray-100">
+            <h2 className="text-sm font-semibold text-gray-700 mb-3">
+              📸 Photos de votre réparation
+            </h2>
+
+            {/* Grille 2 colonnes — avant à gauche, après à droite */}
+            <div className="grid grid-cols-2 gap-2">
+              {/* Photos "avant" */}
+              {photos.filter(p => p.type === 'before').map(photo => (
+                <div key={photo.id} className="space-y-1">
+                  <button
+                    onClick={() => setLightbox(photo.url)}
+                    className="relative w-full aspect-square rounded-lg overflow-hidden bg-gray-100
+                               border border-gray-200 hover:opacity-90 transition-opacity"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photo.thumbnail_url ?? photo.url}
+                      alt="Avant réparation"
+                      className="w-full h-full object-cover"
+                    />
+                    <span className="absolute top-1.5 left-1.5 text-[9px] font-semibold
+                                     bg-black/60 text-white px-1.5 py-0.5 rounded-full">
+                      Avant
+                    </span>
+                  </button>
+                </div>
+              ))}
+
+              {/* Photos "après" */}
+              {photos.filter(p => p.type === 'after').map(photo => (
+                <div key={photo.id} className="space-y-1">
+                  <button
+                    onClick={() => setLightbox(photo.url)}
+                    className="relative w-full aspect-square rounded-lg overflow-hidden bg-gray-100
+                               border border-gray-200 hover:opacity-90 transition-opacity"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photo.thumbnail_url ?? photo.url}
+                      alt="Après réparation"
+                      className="w-full h-full object-cover"
+                    />
+                    <span className="absolute top-1.5 left-1.5 text-[9px] font-semibold
+                                     bg-green-600/80 text-white px-1.5 py-0.5 rounded-full">
+                      Après
+                    </span>
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-xs text-gray-400 mt-2 text-center">
+              Appuyez sur une photo pour l&apos;agrandir
+            </p>
+          </div>
+        )}
+
         {/* CTA "Venir récupérer" si prêt */}
         {status === 'ready' && mapsUrl && (
           <div className="px-6 py-4 border-b border-gray-100">
@@ -356,6 +418,33 @@ export default function TrackingClient({ ticket, shop }) {
       <p className="mt-5 text-gray-400 text-xs">
         Mis à jour {formatElapsed(elapsed)} · actualisation automatique
       </p>
+
+      {/* ── Lightbox photo ── */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+        >
+          {/* Bouton fermer */}
+          <button
+            onClick={() => setLightbox(null)}
+            className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/20
+                       text-white text-xl flex items-center justify-center
+                       hover:bg-white/30 transition-colors"
+            aria-label="Fermer"
+          >
+            ×
+          </button>
+
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightbox}
+            alt="Photo agrandie"
+            className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
 
     </div>
   )

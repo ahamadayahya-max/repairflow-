@@ -16,6 +16,7 @@ import BrandDropdown from '@/components/admin/BrandDropdown'
 import ModelDropdown from '@/components/admin/ModelDropdown'
 import PartSearchDropdown from '@/components/admin/PartSearchDropdown'
 import FactureIndicator from '@/components/admin/FactureIndicator'
+import QREligibilityChecker from '@/components/admin/qualirepar/QREligibilityChecker'
 
 const DEVICE_TYPES = [
   { value: 'smartphone', label: '📱 Smartphone' },
@@ -64,6 +65,12 @@ export default function NewTicketPage() {
   const [deviceType,     setDeviceType]     = useState('smartphone')
   const [brand,          setBrand]          = useState('')
   const [model,          setModel]          = useState('')
+
+  // ── IMEI / Numéro de série ──
+  const [imei, setImei] = useState('')
+
+  // ── QualiRépar ──
+  const [qrResult, setQrResult] = useState(null)  // résultat du checker d'éligibilité
 
   // ── Données ticket ──
   const [issue,   setIssue]   = useState('')
@@ -266,6 +273,14 @@ export default function NewTicketPage() {
         ifixit_category:    selectedDevice?.category    ?? null,
         ifixit_subcategory: selectedDevice?.subcategory ?? null,
         ifixit_image_url:   selectedDevice?.imageUrl    ?? null,
+        // Champs QualiRépar (remplis si éligibilité vérifiée)
+        qr_imei:            imei.trim() || null,
+        qr_eligible:        qrResult?.eligible ?? false,
+        qr_montant:         qrResult?.bonus_amount ?? null,
+        qr_eco_org:         qrResult?.eco_org ?? null,
+        qr_brand_id:        qrResult?.brand_id ?? null,
+        qr_product_type_id: qrResult?.product_id ?? null,
+        qr_status:          qrResult?.eligible ? 'eligible' : 'non_eligible',
       }
 
       const { data: ticket, error: tErr } = await supabase
@@ -397,6 +412,7 @@ export default function NewTicketPage() {
     setIssue(''); setUrgency('normal'); setReadyAt('')
     setPriceEstimate(''); setPriceFinal(''); setDepositAmount('')
     setSelectedParts([])
+    setImei(''); setQrResult(null)
     setTicketId(null); setError(null)
   }
 
@@ -717,6 +733,48 @@ export default function NewTicketPage() {
                 />
               </div>
             </div>
+
+            {/* IMEI / Numéro de série */}
+            <div>
+              <label className={labelClass}>
+                IMEI / Numéro de série
+                <span className="text-gray-600 font-normal ml-1">(optionnel — requis pour QualiRépar)</span>
+              </label>
+              <input
+                type="text"
+                value={imei}
+                onChange={e => setImei(e.target.value)}
+                placeholder="Ex : 352999001761481"
+                maxLength={30}
+                className={inputClass}
+              />
+            </div>
+
+            {/* ── Widget éligibilité QualiRépar (apparaît si une marque est saisie) ── */}
+            {brand && (
+              <QREligibilityChecker
+                defaultBrand=""
+                onResult={res => setQrResult(res?.eligible ? res : null)}
+              />
+            )}
+
+            {/* ── Résultat éligibilité QualiRépar ── */}
+            {qrResult?.eligible && (
+              <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
+                style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)' }}>
+                <span className="text-2xl leading-none mt-0.5">🔁</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-green-400 text-sm font-bold leading-tight">
+                    ✅ Remise de {qrResult.bonus_amount} € appliquée automatiquement
+                  </p>
+                  <p className="text-green-400/70 text-xs mt-0.5">
+                    Bonus QualiRépar via{' '}
+                    {qrResult.eco_org === 'ecologic' ? 'Ecologic' : 'Ecosystem'} —
+                    sera déduit à la facturation
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Description du problème */}
             <div>
