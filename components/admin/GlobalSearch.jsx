@@ -137,13 +137,19 @@ export default function GlobalSearch() {
           .map(f => `${f}.ilike.%${q}%`)
           .join(',')
 
-        const { data } = await supabase
+        let query = supabase
           .from(src.key)
           .select(src.select)
           .eq('shop_id', shop.id)
           .or(orFilter)
           .limit(4)
 
+        // Les clients archivés sont exclus de la recherche globale
+        if (src.key === 'clients') {
+          query = query.eq('archived', false)
+        }
+
+        const { data } = await query
         return { source: src, items: data ?? [] }
       })
 
