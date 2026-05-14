@@ -8,7 +8,8 @@ import { useSearchParams } from 'next/navigation'
 import { getSupabaseClient } from '@/lib/supabase/client'
 import {
   Search, RefreshCw, Loader2, Ticket, Plus,
-  Smartphone, Laptop, Tablet, Tv, Package, SlidersHorizontal, X
+  Smartphone, Laptop, Tablet, Tv, Package, SlidersHorizontal, X,
+  Trash2, ChevronRight,
 } from 'lucide-react'
 import BrandDropdown from '@/components/admin/BrandDropdown'
 import ModelDropdown from '@/components/admin/ModelDropdown'
@@ -62,6 +63,28 @@ export default function TicketsPage() {
   const [brandFilter,  setBrandFilter]  = useState(null)
   const [modelFilter,  setModelFilter]  = useState(null)
   const [showFilters,  setShowFilters]  = useState(false)
+
+  // Suppression depuis la liste
+  const [confirmId,  setConfirmId]  = useState(null) // id du ticket en attente de confirmation
+  const [deletingId, setDeletingId] = useState(null) // id en cours de suppression
+
+  async function handleDelete(ticketId) {
+    setDeletingId(ticketId)
+    try {
+      const res = await fetch(`/api/tickets/${ticketId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error || 'Erreur serveur')
+      }
+      // Retire le ticket de la liste localement sans recharger
+      setTickets(prev => prev.filter(t => t.id !== ticketId))
+    } catch (err) {
+      alert('Erreur : ' + err.message)
+    } finally {
+      setDeletingId(null)
+      setConfirmId(null)
+    }
+  }
 
   // Charge le shop_id puis les tickets en une seule passe
   async function fetchTickets() {
@@ -285,6 +308,7 @@ export default function TicketsPage() {
                   ))}
                 </tr>
               </thead>
+
               <tbody className="divide-y divide-white/5">
                 {displayed.map(ticket => (
                   <tr key={ticket.id} className="hover:bg-white/[0.03] transition-colors">
@@ -310,12 +334,49 @@ export default function TicketsPage() {
                       {formatDate(ticket.received_at)}
                     </td>
                     <td className="px-4 py-3">
-                      <Link
-                        href={`/admin/tickets/${ticket.id}`}
-                        className="text-amber-400 hover:text-amber-300 text-xs font-medium transition-colors whitespace-nowrap"
-                      >
-                        Voir →
-                      </Link>
+                      <div className="flex items-center gap-1 justify-end">
+                        {/* Lien détail */}
+                        <Link
+                          href={`/admin/tickets/${ticket.id}`}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium
+                                     text-amber-400 hover:text-amber-300 hover:bg-amber-400/10 transition-colors whitespace-nowrap"
+                        >
+                          Voir <ChevronRight className="w-3 h-3" />
+                        </Link>
+
+                        {/* Bouton supprimer avec confirmation inline */}
+                        {confirmId === ticket.id ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleDelete(ticket.id)}
+                              disabled={deletingId === ticket.id}
+                              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-500 hover:bg-red-400
+                                         text-white transition-colors disabled:opacity-50 whitespace-nowrap"
+                            >
+                              {deletingId === ticket.id
+                                ? <Loader2 className="w-3 h-3 animate-spin" />
+                                : 'Confirmer'
+                              }
+                            </button>
+                            <button
+                              onClick={() => setConfirmId(null)}
+                              className="px-2 py-1.5 rounded-lg text-xs text-gray-500 hover:text-white
+                                         hover:bg-white/5 transition-colors"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmId(ticket.id)}
+                            className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-400/10
+                                       transition-colors"
+                            title="Supprimer ce ticket"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
