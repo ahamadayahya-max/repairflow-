@@ -49,7 +49,7 @@ export default function Navbar() {
           <div className="flex items-center justify-between h-16 md:h-18">
             {/* Logo */}
             <a href="/" className="flex items-center flex-shrink-0">
-              <img src="/logo-dark.png" alt="ReparFlow" className="h-8 w-auto" />
+              <img src="/logo-dark.svg" alt="ReparFlow" className="h-8 w-auto" />
             </a>
 
             {/* Liens de navigation — desktop */}

@@ -128,7 +128,7 @@ export default function RegisterPage() {
 
         {/* Logo */}
         <Link href="/" className="flex items-center justify-center mb-8">
-          <img src="/logo-dark.png" alt="ReparFlow" style={{ height: 48, width: 'auto' }} />
+          <img src="/logo-dark.svg" alt="ReparFlow" style={{ height: 48, width: 'auto' }} />
         </Link>
 
         <div className="bg-[#111118] rounded-2xl border border-white/10 p-6">

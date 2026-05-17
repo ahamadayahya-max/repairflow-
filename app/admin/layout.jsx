@@ -14,7 +14,7 @@ import GlobalSearch from '@/components/admin/GlobalSearch'
 import NotificationBell from '@/components/admin/NotificationBell'
 import QuickCreate from '@/components/admin/QuickCreate'
 import Breadcrumb from '@/components/admin/Breadcrumb'
-import { ThemeToggleCompact } from '@/components/ThemeToggle'
+
 
 // ---------------------------------------------------------------------------
 // Structure de navigation groupée
@@ -216,7 +216,7 @@ export default function AdminLayout({ children }) {
 
         {/* Logo */}
         <div className="flex items-center px-5 py-4 border-b border-white/10">
-          <img src="/logo-dark.png" alt="ReparFlow" className="h-8 w-auto" />
+          <img src="/logo-dark.svg" alt="ReparFlow" className="h-8 w-auto" />
         </div>
 
         {/* Navigation groupée */}
@@ -290,9 +290,6 @@ export default function AdminLayout({ children }) {
 
         {/* Pied de sidebar */}
         <div className="px-3 py-4 border-t border-white/10 space-y-3">
-          {/* Toggle thème clair / sombre */}
-          <ThemeToggleCompact />
-
           {/* Infos atelier + déconnexion */}
           <div className="px-1">
             {shop?.name && (
@@ -326,7 +323,7 @@ export default function AdminLayout({ children }) {
 
           {/* Logo mobile uniquement */}
           <div className="lg:hidden flex items-center flex-shrink-0">
-            <img src="/logo-dark.png" alt="ReparFlow" className="h-6 w-auto" />
+            <img src="/logo-dark.svg" alt="ReparFlow" className="h-6 w-auto" />
           </div>
 
           {/* Breadcrumb desktop */}

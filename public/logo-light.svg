@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 52" fill="none">
+  <!-- Icône fond amber -->
+  <rect x="0" y="4" width="44" height="44" rx="10" fill="#F59E0B"/>
+  <!-- Corps de la clé -->
+  <rect x="12" y="22" width="14" height="5" rx="2.5" fill="white"/>
+  <rect x="18" y="16" width="5" height="17" rx="2.5" fill="white"/>
+  <!-- Tête circulaire -->
+  <circle cx="31" cy="18" r="6" fill="white"/>
+  <circle cx="31" cy="18" r="3.5" fill="#F59E0B"/>
+  <!-- Manche diagonal -->
+  <rect x="15" y="30" width="5" height="12" rx="2.5" fill="white" transform="rotate(-45 15 30)"/>
+  <!-- Texte ReparFlow fond clair -->
+  <text x="56" y="34" font-family="'Segoe UI', system-ui, -apple-system, sans-serif" font-size="22" font-weight="700" fill="#111118" letter-spacing="-0.5">Repar<tspan fill="#D97706">Flow</tspan></text>
+</svg>

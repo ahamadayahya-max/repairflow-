@@ -14,7 +14,7 @@ export default function Footer() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 mb-8">
           <div>
             <a href="/" className="flex items-center mb-2">
-              <img src="/logo-dark.png" alt="ReparFlow" style={{ height: 32, width: 'auto' }} />
+              <img src="/logo-dark.svg" alt="ReparFlow" style={{ height: 32, width: 'auto' }} />
             </a>
             <p className="text-[#9CA3AF] text-sm max-w-xs">
               La solution de gestion pour les ateliers de réparation indépendants.

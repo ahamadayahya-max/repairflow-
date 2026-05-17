@@ -51,7 +51,7 @@ function NotFoundPage() {
     <div className="min-h-screen bg-[#F5F5F5] flex flex-col items-center justify-center px-4 text-center">
 
       <div className="flex items-center justify-center mb-8">
-        <img src="/logo-light.png" alt="ReparFlow" style={{ height: 40, width: 'auto' }} />
+        <img src="/logo-light.svg" alt="ReparFlow" style={{ height: 40, width: 'auto' }} />
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-8 py-10 max-w-sm w-full">

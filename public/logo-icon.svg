@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52" fill="none">
+  <rect width="52" height="52" rx="12" fill="#F59E0B"/>
+  <!-- Corps horizontal -->
+  <rect x="10" y="23" width="14" height="6" rx="3" fill="white"/>
+  <!-- Corps vertical -->
+  <rect x="19" y="15" width="6" height="18" rx="3" fill="white"/>
+  <!-- Tête circulaire -->
+  <circle cx="34" cy="18" r="7" fill="white"/>
+  <circle cx="34" cy="18" r="4" fill="#F59E0B"/>
+  <!-- Manche diagonal -->
+  <rect x="13" y="33" width="6" height="13" rx="3" fill="white" transform="rotate(-45 13 33)"/>
+</svg>
