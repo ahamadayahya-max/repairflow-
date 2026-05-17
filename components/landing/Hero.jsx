@@ -35,7 +35,7 @@ export default function Hero() {
               </h1>
 
               <p className="text-lg text-[#9CA3AF] leading-relaxed max-w-xl">
-                RepairFlow suit chaque réparation, notifie vos clients par SMS et email,
+                ReparFlow suit chaque réparation, notifie vos clients par SMS et email,
                 et vous fait gagner <strong className="text-[#F1F0ED]">2h par semaine</strong> sur
                 les appels et les relances.
               </p>

@@ -1,4 +1,4 @@
-# RepairFlow — CLAUDE.md
+# ReparFlow — CLAUDE.md
 
 Ce fichier est lu par Claude Code à chaque session. Il contient toutes les conventions,
 règles métier et informations architecturales nécessaires pour travailler de façon
@@ -8,7 +8,7 @@ autonome et cohérente sur ce projet.
 
 ## Contexte du projet
 
-RepairFlow est un SaaS B2B de gestion d'ateliers de réparation électronique (smartphones,
+ReparFlow est un SaaS B2B de gestion d'ateliers de réparation électronique (smartphones,
 tablettes, laptops, consoles, TV, électroménager). Il permet aux techniciens de créer et
 suivre des tickets de réparation, d'envoyer des notifications automatiques aux clients
 (SMS + email), et d'orchestrer les workflows via n8n. Les clients finaux peuvent suivre
@@ -246,7 +246,7 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...            # clé privée, serveur uniquem
 MAILPIT_SMTP_HOST=localhost
 MAILPIT_SMTP_PORT=1025
 MAIL_FROM_ADDRESS=noreply@repairflow.local
-MAIL_FROM_NAME=RepairFlow
+MAIL_FROM_NAME=ReparFlow
 
 # n8n
 N8N_BASE_URL=http://localhost:5678

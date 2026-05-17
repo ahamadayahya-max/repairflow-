@@ -93,7 +93,7 @@ export async function POST(request, { params }) {
     }
 
     if (channel === 'sms') {
-      const result = await sendSms({ to: client.phone, content: customMsg.trim(), sender: shop?.name?.slice(0, 11) ?? 'RepairFlow' })
+      const result = await sendSms({ to: client.phone, content: customMsg.trim(), sender: shop?.name?.slice(0, 11) ?? 'ReparFlow' })
       if (!result.success) return NextResponse.json({ error: result.error }, { status: 500 })
       return NextResponse.json({ success: true, channel: 'sms' })
     }
@@ -115,7 +115,7 @@ export async function POST(request, { params }) {
 
   if (channel === 'sms') {
     const smsContent = tmpl.sms(vars)
-    const result     = await sendSms({ to: client.phone, content: smsContent, sender: shop?.name?.slice(0, 11) ?? 'RepairFlow' })
+    const result     = await sendSms({ to: client.phone, content: smsContent, sender: shop?.name?.slice(0, 11) ?? 'ReparFlow' })
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 500 })
     return NextResponse.json({ success: true, channel: 'sms' })
   }

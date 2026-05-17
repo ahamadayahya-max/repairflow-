@@ -134,7 +134,7 @@ export default function QRSetup({ shopId, onConfigSaved }) {
             <p className="text-amber-300 font-semibold text-sm">Clé API manquante</p>
             <p className="text-amber-400/70 text-xs mt-0.5">
               Renseignez votre clé API AgoraPlus ci-dessous pour pouvoir soumettre des dossiers
-              directement depuis RepairFlow.
+              directement depuis ReparFlow.
             </p>
           </div>
         </div>

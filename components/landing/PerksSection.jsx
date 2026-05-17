@@ -27,7 +27,7 @@ export default function PerksSection() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Titre */}
         <div className="text-center mb-14">
-          <p className="text-amber-500 text-sm font-semibold uppercase tracking-widest mb-3">Pourquoi RepairFlow</p>
+          <p className="text-amber-500 text-sm font-semibold uppercase tracking-widest mb-3">Pourquoi ReparFlow</p>
           <h2 className="text-3xl sm:text-4xl font-bold text-[#F1F0ED] mb-4">
             Conçu avec et pour les réparateurs
           </h2>

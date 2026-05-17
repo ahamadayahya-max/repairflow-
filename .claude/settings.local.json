@@ -145,7 +145,10 @@
       "Bash(powershell.exe -Command \"\\(Get-Item 'C:\\\\Users\\\\HP\\\\Desktop\\\\catalogue_pieces_detachees.xlsx'\\).length / 1MB\")",
       "Bash(mkdir -p \"C:\\\\Users\\\\HP\\\\Desktop\\\\projet\\\\app\\\\api\\\\invoices\\\\[id]\\\\pdf\")",
       "Bash(mkdir -p \"C:\\\\Users\\\\HP\\\\Desktop\\\\projet\\\\app\\\\api\\\\invoices\\\\[id]\\\\send\")",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3002)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3002)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\HP\\\\Desktop\\\\projet\\\\.claude\\\\worktrees\\\\funny-antonelli-f4a1b5\" -Directory -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -ExpandProperty Name)",
+      "Bash(\\\\.js\")"
     ]
   }
 }

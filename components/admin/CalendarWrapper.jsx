@@ -43,7 +43,7 @@ const DARK_CSS = `
 `
 
 /**
- * Enveloppe FullCalendar avec le thème sombre RepairFlow.
+ * Enveloppe FullCalendar avec le thème sombre ReparFlow.
  * Importé dynamiquement (ssr:false) depuis la page Agenda.
  * @param {{
  *   events: object[],

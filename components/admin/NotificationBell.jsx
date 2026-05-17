@@ -76,9 +76,9 @@ export default function NotificationBell({ shopId, onRead }) {
         filter: `shop_id=eq.${shopId}`,
       }, (payload) => {
         // Toast visuel simple (title tag)
-        document.title = `🔔 ${payload.new.title} — RepairFlow`
+        document.title = `🔔 ${payload.new.title} — ReparFlow`
         setTimeout(() => {
-          document.title = 'RepairFlow'
+          document.title = 'ReparFlow'
         }, 4000)
         loadNotifications()
       })

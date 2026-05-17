@@ -40,7 +40,7 @@ export default function NotFound() {
         href="/"
         className="mt-4 text-xs text-gray-600 hover:text-gray-400 transition-colors"
       >
-        Accueil RepairFlow →
+        Accueil ReparFlow →
       </Link>
     </div>
   )

@@ -9,7 +9,7 @@ import { getSupabaseClient } from '@/lib/supabase/client'
 // ---------------------------------------------------------------------------
 
 /**
- * Hook de gestion du thème RepairFlow.
+ * Hook de gestion du thème ReparFlow.
  * @returns {{ theme: 'dark'|'light'|'system', resolved: 'dark'|'light', setTheme: Function }}
  */
 export function useTheme() {
@@ -18,7 +18,7 @@ export function useTheme() {
   // Lit le localStorage en premier pour éviter le flash au chargement
   const [theme, setThemeState] = useState(() => {
     if (typeof window === 'undefined') return 'dark'
-    return localStorage.getItem('repairflow-theme') || 'dark'
+    return localStorage.getItem('reparflow-theme') || 'dark'
   })
 
   // Thème réellement appliqué (résout 'system' → 'dark'|'light')
@@ -67,7 +67,7 @@ export function useTheme() {
           .maybeSingle()
         if (data?.theme && data.theme !== theme) {
           setThemeState(data.theme)
-          localStorage.setItem('repairflow-theme', data.theme)
+          localStorage.setItem('reparflow-theme', data.theme)
         }
       } catch {
         // Silencieux — le localStorage suffit en cas d'erreur réseau
@@ -82,7 +82,7 @@ export function useTheme() {
   // ---------------------------------------------------------------------------
   async function setTheme(newTheme) {
     setThemeState(newTheme)
-    localStorage.setItem('repairflow-theme', newTheme)
+    localStorage.setItem('reparflow-theme', newTheme)
 
     // Sauvegarde en base pour la persistence multi-appareils
     try {

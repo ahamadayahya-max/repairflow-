@@ -1,9 +1,9 @@
-{
+﻿{
   "meta": {
-    "instanceId": "repairflow",
+    "instanceId": "ReparFlow",
     "description": "Agent d'intake IA — Reçoit les SMS/WhatsApp clients, appelle Claude pour extraire les infos de réparation, crée le ticket Supabase ou pose une question de clarification, puis envoie la réponse par SMS via Brevo."
   },
-  "name": "RepairFlow — Intake Agent IA",
+  "name": "ReparFlow — Intake Agent IA",
   "active": false,
   "nodes": [
 
@@ -233,7 +233,7 @@
         "sendBody": true,
         "contentType": "json",
         "body": {
-          "sender":    "RepairFlow",
+          "sender":    "ReparFlow",
           "recipient": "={{ $json.fromPhone }}",
           "content":   "={{ $json.replyMsg }}"
         },
@@ -307,5 +307,5 @@
     "callerPolicy": "workflowsFromSameOwner",
     "errorWorkflow": ""
   },
-  "tags": ["repairflow", "intake", "ia", "sms"]
+  "tags": ["ReparFlow", "intake", "ia", "sms"]
 }

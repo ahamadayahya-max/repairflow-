@@ -1,8 +1,8 @@
 import './globals.css'
 
 export const metadata = {
-  title: 'RepairFlow — Gérez vos réparations, informez vos clients automatiquement',
-  description: 'RepairFlow suit chaque réparation, notifie vos clients par SMS et email, et vous fait gagner 2h par semaine sur les appels et relances.',
+  title: 'ReparFlow — Gérez vos réparations, informez vos clients automatiquement',
+  description: 'ReparFlow suit chaque réparation, notifie vos clients par SMS et email, et vous fait gagner 2h par semaine sur les appels et relances.',
 }
 
 export default function RootLayout({ children }) {
@@ -16,7 +16,7 @@ export default function RootLayout({ children }) {
         */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('repairflow-theme')||'dark';if(t==='system'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`,
+            __html: `(function(){try{var t=localStorage.getItem('reparflow-theme')||'dark';if(t==='system'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`,
           }}
         />
       </head>

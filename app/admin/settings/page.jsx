@@ -422,7 +422,7 @@ export default function SettingsPage() {
             </span>
           </label>
           <div className="flex items-center gap-2">
-            <span className="text-gray-600 text-sm flex-shrink-0">repairflow.app/</span>
+            <span className="text-gray-600 text-sm flex-shrink-0">reparflow.app/</span>
             <input
               type="text"
               value={form.slug}
@@ -616,7 +616,7 @@ export default function SettingsPage() {
           Compte
         </h2>
         <p className="text-xs text-gray-500">
-          Pour modifier votre adresse email ou mot de passe, contactez le support RepairFlow.
+          Pour modifier votre adresse email ou mot de passe, contactez le support ReparFlow.
         </p>
       </div>
 

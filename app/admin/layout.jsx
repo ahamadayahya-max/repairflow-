@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { getSupabaseClient } from '@/lib/supabase/client'
 import {
-  Wrench, LogOut, Loader2, Menu, X, Zap,
+  LogOut, Loader2, Menu, X, Zap,
   LayoutGrid, Bell, Ticket, CalendarDays, Users, Leaf,
   FileText, Receipt, BarChart3, Package, ShoppingCart,
   HardHat, Settings, ClipboardCheck,
@@ -215,11 +215,8 @@ export default function AdminLayout({ children }) {
       `}>
 
         {/* Logo */}
-        <div className="flex items-center gap-2.5 px-5 py-5 border-b border-white/10">
-          <div className="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center">
-            <Wrench className="w-4 h-4 text-amber-400" />
-          </div>
-          <span className="text-white font-bold text-base">RepairFlow</span>
+        <div className="flex items-center px-5 py-4 border-b border-white/10">
+          <img src="/logo-dark.png" alt="ReparFlow" className="h-8 w-auto" />
         </div>
 
         {/* Navigation groupée */}
@@ -328,9 +325,8 @@ export default function AdminLayout({ children }) {
           </button>
 
           {/* Logo mobile uniquement */}
-          <div className="lg:hidden flex items-center gap-2 flex-shrink-0">
-            <Wrench className="w-4 h-4 text-amber-400" />
-            <span className="text-white font-bold text-sm">RepairFlow</span>
+          <div className="lg:hidden flex items-center flex-shrink-0">
+            <img src="/logo-dark.png" alt="ReparFlow" className="h-6 w-auto" />
           </div>
 
           {/* Breadcrumb desktop */}

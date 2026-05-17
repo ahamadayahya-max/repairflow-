@@ -338,7 +338,7 @@ export default function InvoicePDF({ ticket, shop, client, ticketParts = [], pho
             {shop.logo_url ? (
               <Image src={shop.logo_url} style={s.logo} />
             ) : (
-              <Text style={s.shopName}>{shop.name ?? 'RepairFlow'}</Text>
+              <Text style={s.shopName}>{shop.name ?? 'ReparFlow'}</Text>
             )}
             {shop.address && <Text style={s.shopMeta}>{shop.address}</Text>}
             {shop.phone   && <Text style={s.shopMeta}>{shop.phone}</Text>}
@@ -355,7 +355,7 @@ export default function InvoicePDF({ ticket, shop, client, ticketParts = [], pho
         <View style={s.twoCol}>
           <View style={s.col}>
             <Text style={s.sectionTitle}>Émetteur</Text>
-            <Text style={s.value}>{shop.name ?? 'RepairFlow'}</Text>
+            <Text style={s.value}>{shop.name ?? 'ReparFlow'}</Text>
             {shop.address && <Text style={s.value}>{shop.address}</Text>}
             {shop.phone   && <Text style={s.value}>{shop.phone}</Text>}
           </View>
@@ -428,7 +428,7 @@ export default function InvoicePDF({ ticket, shop, client, ticketParts = [], pho
         {/* ── Pied de page ── */}
         <View style={s.footer} fixed>
           <Text style={s.footerText}>
-            Merci de votre confiance — {shop.name ?? 'RepairFlow'}
+            Merci de votre confiance — {shop.name ?? 'ReparFlow'}
           </Text>
           <Text style={s.footerText}>
             repairflow-app.vercel.app/suivi/{ticket.tracking_token}
@@ -447,7 +447,7 @@ export default function InvoicePDF({ ticket, shop, client, ticketParts = [], pho
               <Text style={s.annexeTitle}>Annexe photos</Text>
               <Text style={s.annexeSubtitle}>
                 Facture N° {`RF-${(ticket.id ?? '').slice(0, 8).toUpperCase()}`}
-                {' — '}{shop.name ?? 'RepairFlow'}
+                {' — '}{shop.name ?? 'ReparFlow'}
               </Text>
             </View>
             <View>
@@ -484,7 +484,7 @@ export default function InvoicePDF({ ticket, shop, client, ticketParts = [], pho
           {/* Pied de page */}
           <View style={s.footer} fixed>
             <Text style={s.footerText}>
-              Annexe photos — {shop.name ?? 'RepairFlow'}
+              Annexe photos — {shop.name ?? 'ReparFlow'}
             </Text>
             <Text style={s.footerText}>
               repairflow-app.vercel.app/suivi/{ticket.tracking_token}

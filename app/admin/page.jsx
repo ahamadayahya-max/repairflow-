@@ -212,7 +212,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-amber-300 font-semibold text-sm">
-                {isNewUser ? 'Bienvenue sur RepairFlow !' : 'Essai gratuit en cours'}
+                {isNewUser ? 'Bienvenue sur ReparFlow !' : 'Essai gratuit en cours'}
               </p>
               <p className="text-amber-500/70 text-xs mt-0.5">
                 {trialDaysLeft} jour{trialDaysLeft !== 1 ? 's' : ''} restant{trialDaysLeft !== 1 ? 's' : ''} · Passez à un plan payant pour continuer sans interruption

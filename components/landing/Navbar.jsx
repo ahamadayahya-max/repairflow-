@@ -2,7 +2,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Wrench, Menu, X } from 'lucide-react'
+import { Menu, X } from 'lucide-react'
 import DemoModal from './DemoModal'
 
 /**
@@ -22,11 +22,11 @@ export default function Navbar() {
 
     // Écoute de l'événement custom pour ouvrir la modale depuis n'importe quel composant
     const handleOpenDemo = () => setIsModalOpen(true)
-    window.addEventListener('repairflow:open-demo', handleOpenDemo)
+    window.addEventListener('reparflow:open-demo', handleOpenDemo)
 
     return () => {
       window.removeEventListener('scroll', handleScroll)
-      window.removeEventListener('repairflow:open-demo', handleOpenDemo)
+      window.removeEventListener('reparflow:open-demo', handleOpenDemo)
     }
   }, [])
 
@@ -48,11 +48,8 @@ export default function Navbar() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 md:h-18">
             {/* Logo */}
-            <a href="/" className="flex items-center gap-2 flex-shrink-0">
-              <Wrench className="w-6 h-6 text-amber-500" />
-              <span className="text-lg font-bold text-[#F1F0ED] tracking-tight">
-                RepairFlow
-              </span>
+            <a href="/" className="flex items-center flex-shrink-0">
+              <img src="/logo-dark.png" alt="ReparFlow" className="h-8 w-auto" />
             </a>
 
             {/* Liens de navigation — desktop */}

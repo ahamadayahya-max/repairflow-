@@ -1,5 +1,5 @@
-{
-  "name": "RepairFlow — Création de ticket",
+﻿{
+  "name": "ReparFlow — Création de ticket",
   "active": false,
   "settings": {
     "executionOrder": "v1",
@@ -7,7 +7,7 @@
     "callerPolicy": "workflowsFromSameOwner",
     "errorWorkflow": ""
   },
-  "id": "repairflow-create-ticket-v1",
+  "id": "ReparFlow-create-ticket-v1",
   "meta": {
     "description": "Création d'un ticket de réparation : validation du payload, upsert contact Supabase, création ticket, notifications SMS et Email via Brevo.",
     "templateId": ""
@@ -20,7 +20,7 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [0, 300],
-      "webhookId": "repairflow-create-ticket",
+      "webhookId": "ReparFlow-create-ticket",
       "parameters": {
         "httpMethod": "POST",
         "path": "repair/create",
@@ -222,7 +222,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ sender: { name: 'RepairFlow', email: 'ahamada.yahya@gmail.com' }, to: [{ email: $json.contact_email, name: $json.contact_name }], subject: 'Votre réparation a bien été enregistrée', htmlContent: '<p>Bonjour ' + $json.contact_name + ',</p><p>Votre <strong>' + ($json.device_brand || '') + ' ' + ($json.device_model || '') + '</strong> a bien été reçu dans notre atelier.</p><p>Suivez l\\'avancement de votre réparation en temps réel ici :</p><p><a href=\\'' + $json.tracking_url + '\\'>' + $json.tracking_url + '</a></p><p>L\\'équipe RepairFlow</p>' }) }}",
+        "jsonBody": "={{ JSON.stringify({ sender: { name: 'ReparFlow', email: 'ahamada.yahya@gmail.com' }, to: [{ email: $json.contact_email, name: $json.contact_name }], subject: 'Votre réparation a bien été enregistrée', htmlContent: '<p>Bonjour ' + $json.contact_name + ',</p><p>Votre <strong>' + ($json.device_brand || '') + ' ' + ($json.device_model || '') + '</strong> a bien été reçu dans notre atelier.</p><p>Suivez l\\'avancement de votre réparation en temps réel ici :</p><p><a href=\\'' + $json.tracking_url + '\\'>' + $json.tracking_url + '</a></p><p>L\\'équipe ReparFlow</p>' }) }}",
         "options": {
           "response": {
             "response": {
@@ -253,7 +253,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ sender: 'RepairFlow', recipient: $('Build Tracking URL').first().json.contact_phone, content: 'Bonjour ' + $('Build Tracking URL').first().json.contact_name + ', votre appareil a bien ete recu. Suivez votre reparation : ' + $('Build Tracking URL').first().json.tracking_url }) }}",
+        "jsonBody": "={{ JSON.stringify({ sender: 'ReparFlow', recipient: $('Build Tracking URL').first().json.contact_phone, content: 'Bonjour ' + $('Build Tracking URL').first().json.contact_name + ', votre appareil a bien ete recu. Suivez votre reparation : ' + $('Build Tracking URL').first().json.tracking_url }) }}",
         "options": {
           "response": {
             "response": {

@@ -127,11 +127,8 @@ export default function RegisterPage() {
       <div className="w-full max-w-sm">
 
         {/* Logo */}
-        <Link href="/" className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-9 h-9 bg-amber-500/20 rounded-xl flex items-center justify-center">
-            <Wrench className="w-5 h-5 text-amber-400" />
-          </div>
-          <span className="text-white font-bold text-xl">RepairFlow</span>
+        <Link href="/" className="flex items-center justify-center mb-8">
+          <img src="/logo-dark.png" alt="ReparFlow" style={{ height: 48, width: 'auto' }} />
         </Link>
 
         <div className="bg-[#111118] rounded-2xl border border-white/10 p-6">

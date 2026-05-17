@@ -138,7 +138,7 @@ function scoreColor(v) {
 function Footer({ shopName }) {
   return (
     <View style={S.footer} fixed>
-      <Text style={S.footerText}>Généré par RepairFlow — repairflow-app.vercel.app</Text>
+      <Text style={S.footerText}>Généré par ReparFlow — repairflow-app.vercel.app</Text>
       <Text style={S.footerText}>{shopName} — {fmtDate(new Date().toISOString())}</Text>
     </View>
   )

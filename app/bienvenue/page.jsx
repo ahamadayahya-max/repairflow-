@@ -315,11 +315,8 @@ export default function BienvenueePage() {
       <div className="w-full max-w-lg">
 
         {/* Logo */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center">
-            <Wrench className="w-4 h-4 text-amber-400" />
-          </div>
-          <span className="text-white font-bold text-lg">RepairFlow</span>
+        <div className="flex items-center justify-center mb-8">
+          <img src="/logo-dark.png" alt="ReparFlow" style={{ height: 48, width: 'auto' }} />
         </div>
 
         <div className="bg-[#111118] rounded-2xl border border-white/10 p-6 lg:p-8">
@@ -334,7 +331,7 @@ export default function BienvenueePage() {
             <div className="text-center">
               <div className="text-5xl mb-4">🔧</div>
               <h1 className="text-white font-bold text-2xl mb-2">
-                Bienvenue sur RepairFlow !
+                Bienvenue sur ReparFlow !
               </h1>
               <p className="text-gray-400 text-sm mb-1">
                 Votre atelier <strong className="text-white">{shopName}</strong> est prêt.

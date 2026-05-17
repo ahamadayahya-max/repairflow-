@@ -54,11 +54,11 @@ export async function POST(req) {
       },
       body: JSON.stringify({
         sender: {
-          name:  'RepairFlow',
+          name:  'ReparFlow',
           email: process.env.BREVO_SMTP_USER ?? 'ahamada.yahya@gmail.com',
         },
         to: [{ email }],
-        subject: 'Réinitialisez votre mot de passe RepairFlow',
+        subject: 'Réinitialisez votre mot de passe ReparFlow',
         htmlContent: `
 <!DOCTYPE html>
 <html lang="fr">
@@ -77,7 +77,7 @@ export async function POST(req) {
                   <span style="font-size:18px;">🔧</span>
                 </td>
                 <td style="padding-left:10px;">
-                  <span style="color:#ffffff;font-size:18px;font-weight:bold;">RepairFlow</span>
+                  <span style="color:#ffffff;font-size:18px;font-weight:bold;">ReparFlow</span>
                 </td>
               </tr>
             </table>
@@ -119,7 +119,7 @@ export async function POST(req) {
         <tr>
           <td style="padding:16px 32px;border-top:1px solid rgba(255,255,255,0.06);">
             <p style="color:#374151;font-size:11px;margin:0;text-align:center;">
-              RepairFlow — Gestion d'ateliers de réparation
+              ReparFlow — Gestion d'ateliers de réparation
             </p>
           </td>
         </tr>

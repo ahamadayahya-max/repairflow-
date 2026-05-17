@@ -10,7 +10,7 @@ const faqs = [
   },
   {
     q: 'Dois-je changer mes habitudes de travail ?',
-    a: "Non. RepairFlow s'adapte à votre façon de travailler. Vous continuez à accueillir vos clients comme avant — c'est juste le suivi et les notifications qui sont automatisés à votre place.",
+    a: "Non. ReparFlow s'adapte à votre façon de travailler. Vous continuez à accueillir vos clients comme avant — c'est juste le suivi et les notifications qui sont automatisés à votre place.",
   },
   {
     q: 'Mes données sont-elles sécurisées ?',

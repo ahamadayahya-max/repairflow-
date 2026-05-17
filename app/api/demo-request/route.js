@@ -11,7 +11,7 @@ const ADMIN_EMAIL   = process.env.ADMIN_NOTIFICATION_EMAIL ?? 'ahamada.yahya@gma
 /**
  * POST /api/demo-request
  * Enregistre une demande de démo dans Supabase et envoie un email de notification
- * à l'administrateur RepairFlow.
+ * à l'administrateur ReparFlow.
  */
 export async function POST(request) {
   try {
@@ -65,7 +65,7 @@ export async function POST(request) {
       subject: `🔔 Nouvelle demande de démo — ${nom_atelier}`,
       html: `
         <div style="font-family:sans-serif;max-width:520px;margin:auto;">
-          <h2 style="color:#F59E0B;">Nouvelle demande de démo RepairFlow</h2>
+          <h2 style="color:#F59E0B;">Nouvelle demande de démo ReparFlow</h2>
           <table style="width:100%;border-collapse:collapse;">
             <tr><td style="padding:8px 0;color:#6B7280;width:140px;">Prénom</td><td style="padding:8px 0;font-weight:600;">${prenom}</td></tr>
             <tr><td style="padding:8px 0;color:#6B7280;">Atelier</td><td style="padding:8px 0;font-weight:600;">${nom_atelier}</td></tr>

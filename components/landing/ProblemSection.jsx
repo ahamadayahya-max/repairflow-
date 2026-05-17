@@ -75,7 +75,7 @@ export default function ProblemSection() {
         <div className="text-center">
           <div className="inline-block bg-amber-500/10 border border-amber-500/20 rounded-2xl px-8 py-4">
             <p className="text-amber-400 text-lg font-semibold">
-              Avec RepairFlow, tout ça, c'est terminé.
+              Avec ReparFlow, tout ça, c'est terminé.
             </p>
           </div>
         </div>
