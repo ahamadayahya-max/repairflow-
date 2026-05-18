@@ -1,4 +1,4 @@
-import Groq from 'groq-sdk'
+﻿import Groq from 'groq-sdk'
 
 // ---------------------------------------------------------------------------
 // Route Handler — Assistant IA interne pour les réparateurs
@@ -50,7 +50,7 @@ function buildSystemPrompt(ticket, parts, statusHistory) {
     ? `\n\n---\n${contextBlocks.join('\n\n')}`
     : ''
 
-  return `Tu es l'assistant technique de RepairFlow. Tu assistes les réparateurs professionnels dans leur travail quotidien.
+  return `Tu es l'assistant technique de TickeeFlow. Tu assistes les réparateurs professionnels dans leur travail quotidien.
 
 Tes domaines d'expertise :
 - Diagnostic assisté (smartphones, tablettes, laptops, consoles, TV, électroménager)

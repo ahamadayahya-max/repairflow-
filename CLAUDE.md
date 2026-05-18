@@ -1,4 +1,4 @@
-# RepairFlow — CLAUDE.md
+﻿# TickeeFlow — CLAUDE.md
 
 Ce fichier est lu par Claude Code à chaque session. Il contient toutes les conventions,
 règles métier et informations architecturales nécessaires pour travailler de façon
@@ -8,7 +8,7 @@ autonome et cohérente sur ce projet.
 
 ## Contexte du projet
 
-RepairFlow est un SaaS B2B de gestion d'ateliers de réparation électronique (smartphones,
+TickeeFlow est un SaaS B2B de gestion d'ateliers de réparation électronique (smartphones,
 tablettes, laptops, consoles, TV, électroménager). Il permet aux techniciens de créer et
 suivre des tickets de réparation, d'envoyer des notifications automatiques aux clients
 (SMS + email), et d'orchestrer les workflows via n8n. Les clients finaux peuvent suivre
@@ -33,7 +33,7 @@ assistant IA interne sont fonctionnels et déployés sur Vercel.
 | @anthropic-ai/sdk | ^0.90.0 | API Claude — intake agent WhatsApp + assistant IA interne |
 | nodemailer | ^8.0.5 | Envoi d'emails via SMTP (Mailpit en dev, Brevo en prod) |
 | lucide-react | ^0.400.0 | Icônes SVG |
-| Vercel | cloud | Hébergement Next.js — domaine stable : repairflow-app.vercel.app |
+| Vercel | cloud | Hébergement Next.js — domaine stable : tickeeflow-app.vercel.app |
 
 ---
 
@@ -92,19 +92,19 @@ assistant IA interne sont fonctionnels et déployés sur Vercel.
 │
 ├── supabase/
 │   └── migrations/                   — Fichiers SQL — NE JAMAIS MODIFIER un fichier existant
-│       ├── 20260410000000_repairflow_initial_schema.sql
-│       ├── 20260416000000_repairflow_intake_conversations.sql
-│       ├── 20260416000001_repairflow_shops.sql
-│       ├── 20260416000003_repairflow_corrective_migration.sql
+│       ├── 20260410000000_tickeeflow_initial_schema.sql
+│       ├── 20260416000000_tickeeflow_intake_conversations.sql
+│       ├── 20260416000001_tickeeflow_shops.sql
+│       ├── 20260416000003_tickeeflow_corrective_migration.sql
 │       ├── 20260416000004_fix_get_ticket_by_token.sql
 │       └── 20260416000005_intake_conversations.sql
 │
 ├── n8n-workflows/                    — Exports JSON des workflows n8n versionnés
-│   ├── repairflow-create-ticket.json
-│   ├── repairflow-update-status.json
-│   ├── repairflow-stock-alert.json
-│   ├── repairflow-dashboard-stats.json
-│   ├── repairflow-intake-agent.json  — Agent intake WhatsApp → Claude → Supabase
+│   ├── tickeeflow-create-ticket.json
+│   ├── tickeeflow-update-status.json
+│   ├── tickeeflow-stock-alert.json
+│   ├── tickeeflow-dashboard-stats.json
+│   ├── tickeeflow-intake-agent.json  — Agent intake WhatsApp → Claude → Supabase
 │   ├── intake-system-prompt.txt      — System prompt de l'agent intake Claude
 │   └── intake-agent-system-prompt.md
 │
@@ -245,12 +245,12 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...            # clé privée, serveur uniquem
 # Email (Mailpit en dev, Brevo en prod)
 MAILPIT_SMTP_HOST=localhost
 MAILPIT_SMTP_PORT=1025
-MAIL_FROM_ADDRESS=noreply@repairflow.local
-MAIL_FROM_NAME=RepairFlow
+MAIL_FROM_ADDRESS=noreply@tickeeflow.local
+MAIL_FROM_NAME=TickeeFlow
 
 # n8n
 N8N_BASE_URL=http://localhost:5678
-N8N_WEBHOOK_SECRET=repairflow_secret             # header x-webhook-secret à valider
+N8N_WEBHOOK_SECRET=tickeeflow_secret             # header x-webhook-secret à valider
 
 # Claude / Anthropic
 ANTHROPIC_API_KEY=sk-ant-...                     # requis pour /api/ai-assistant et intake agent
@@ -278,7 +278,7 @@ npm run lint                       # ESLint
 
 # Déploiement Vercel
 npx vercel --prod                  # déploie en production
-# Domaine stable : https://repairflow-app.vercel.app
+# Domaine stable : https://tickeeflow-app.vercel.app
 
 # Supabase
 supabase db push                   # applique les migrations locales vers Supabase cloud
@@ -398,7 +398,7 @@ auth.users (Supabase Auth)
 ```bash
 npm run build   # vérifier qu'il n'y a pas d'erreurs
 npx vercel --prod
-# URL stable automatiquement mise à jour : https://repairflow-app.vercel.app
+# URL stable automatiquement mise à jour : https://tickeeflow-app.vercel.app
 ```
 
 ---
@@ -460,7 +460,7 @@ Ajouter `app/admin/dashboard/page.jsx` avec :
 - KPIs : tickets ouverts, en réparation, prêts, livrés ce mois
 - Graphique de volume hebdomadaire
 - Alertes stock (pièces < seuil)
-- Données servies par la RPC n8n `repairflow-dashboard-stats`
+- Données servies par la RPC n8n `tickeeflow-dashboard-stats`
 
 ### 2. 🟡 Gestion du changement de statut depuis l'admin (priorité moyenne)
 Ajouter dans `app/admin/tickets/[id]/page.jsx` :

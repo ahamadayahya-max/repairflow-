@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 export const dynamic = 'force-dynamic'
 
@@ -353,7 +353,7 @@ export default function NewTicketPage() {
         import('react'),
         import('qrcode').then(m => m.default),
       ])
-      const trackingUrl = `https://repairflow-app.vercel.app/suivi/${createdTicket.tracking_token}`
+      const trackingUrl = `https://tickeeflow-app.vercel.app/suivi/${createdTicket.tracking_token}`
       const qrDataUrl   = await QRCode.toDataURL(trackingUrl, { width: 200, margin: 1 })
       const blob        = await pdf(
         createElement(TicketReceiptPDF, { ticket: createdTicket, shop: shopData ?? {}, qrCodeDataUrl: qrDataUrl })
@@ -384,7 +384,7 @@ export default function NewTicketPage() {
         import('react'),
         import('qrcode').then(m => m.default),
       ])
-      const trackingUrl = `https://repairflow-app.vercel.app/suivi/${createdTicket.tracking_token}`
+      const trackingUrl = `https://tickeeflow-app.vercel.app/suivi/${createdTicket.tracking_token}`
       const qrDataUrl   = await QRCode.toDataURL(trackingUrl, { width: 200, margin: 1 })
       const blob        = await pdf(
         createElement(TicketReceiptPDF, { ticket: createdTicket, shop: shopData ?? {}, qrCodeDataUrl: qrDataUrl })

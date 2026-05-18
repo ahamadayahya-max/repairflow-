@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 export const dynamic = 'force-dynamic'
 
@@ -319,7 +319,7 @@ export default function BienvenueePage() {
           <div className="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center">
             <Wrench className="w-4 h-4 text-amber-400" />
           </div>
-          <span className="text-white font-bold text-lg">RepairFlow</span>
+          <span className="text-white font-bold text-lg">TickeeFlow</span>
         </div>
 
         <div className="bg-[#111118] rounded-2xl border border-white/10 p-6 lg:p-8">
@@ -334,7 +334,7 @@ export default function BienvenueePage() {
             <div className="text-center">
               <div className="text-5xl mb-4">🔧</div>
               <h1 className="text-white font-bold text-2xl mb-2">
-                Bienvenue sur RepairFlow !
+                Bienvenue sur TickeeFlow !
               </h1>
               <p className="text-gray-400 text-sm mb-1">
                 Votre atelier <strong className="text-white">{shopName}</strong> est prêt.

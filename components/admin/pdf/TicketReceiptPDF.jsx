@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import {
   Document, Page, Text, View, Image, StyleSheet,
@@ -125,7 +125,7 @@ export function TicketReceiptPDF({ ticket, shop, qrCodeDataUrl }) {
 
   // URL de suivi
   const trackingUrl = ticket?.tracking_token
-    ? `repairflow-app.vercel.app/suivi/${ticket.tracking_token}`
+    ? `tickeeflow-app.vercel.app/suivi/${ticket.tracking_token}`
     : ''
 
   return (

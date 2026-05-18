@@ -1,11 +1,11 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Wrench, Lock, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react'
 
 // Valeur du cookie posée par la route API
-const CORRECT_PASSWORD = 'RepairFlow2026!'
+const CORRECT_PASSWORD = 'TickeeFlow2026!'
 
 /**
  * Page de maintenance — bloque l'accès à toute l'application.
@@ -83,7 +83,7 @@ export default function MaintenancePage() {
           En travaux<span className="text-amber-400">{dots}</span>
         </h1>
         <p className="text-gray-500 text-sm mb-2">
-          RepairFlow est en cours de développement.
+          TickeeFlow est en cours de développement.
         </p>
         <p className="text-gray-600 text-xs mb-8">
           Revenez bientôt — l'application sera disponible très prochainement.

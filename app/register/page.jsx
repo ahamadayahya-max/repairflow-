@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 export const dynamic = 'force-dynamic'
 
@@ -131,7 +131,7 @@ export default function RegisterPage() {
           <div className="w-9 h-9 bg-amber-500/20 rounded-xl flex items-center justify-center">
             <Wrench className="w-5 h-5 text-amber-400" />
           </div>
-          <span className="text-white font-bold text-xl">RepairFlow</span>
+          <span className="text-white font-bold text-xl">TickeeFlow</span>
         </Link>
 
         <div className="bg-[#111118] rounded-2xl border border-white/10 p-6">

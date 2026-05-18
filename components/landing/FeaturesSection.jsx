@@ -1,4 +1,4 @@
-import { CheckCircle, Smartphone, Monitor, Tablet } from 'lucide-react'
+﻿import { CheckCircle, Smartphone, Monitor, Tablet } from 'lucide-react'
 
 /**
  * Mockup : liste de tickets
@@ -54,7 +54,7 @@ function NotifMockup() {
         {/* Bulle envoyée (n8n) */}
         <div className="flex justify-end">
           <div className="bg-amber-500/90 rounded-2xl rounded-br-sm px-4 py-3 max-w-xs">
-            <p className="text-black text-xs font-medium">Votre Samsung Galaxy S23 a bien été reçu ! Suivez votre réparation : repairflow.fr/track/A3FX9K</p>
+            <p className="text-black text-xs font-medium">Votre Samsung Galaxy S23 a bien été reçu ! Suivez votre réparation : tickeeflow.fr/track/A3FX9K</p>
           </div>
         </div>
         {/* Bulle envoyée 2 */}
@@ -64,7 +64,7 @@ function NotifMockup() {
           </div>
         </div>
         <div className="text-center">
-          <span className="text-white/20 text-[10px]">Envoyé automatiquement par RepairFlow</span>
+          <span className="text-white/20 text-[10px]">Envoyé automatiquement par TickeeFlow</span>
         </div>
       </div>
     </div>

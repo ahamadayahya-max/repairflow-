@@ -50,13 +50,13 @@ export async function POST(req, { params }) {
     })
 
     await transporter.sendMail({
-      from:    `"${shop?.name || 'RepairFlow'}" <${process.env.MAIL_FROM_ADDRESS || 'noreply@repairflow.local'}>`,
+      from:    `"${shop?.name || 'TickeeFlow'}" <${process.env.MAIL_FROM_ADDRESS || 'noreply@tickeeflow.local'}>`,
       to:      invoice.client_email,
-      subject: `Votre facture ${invoice.invoice_number} — ${shop?.name || 'RepairFlow'}`,
+      subject: `Votre facture ${invoice.invoice_number} — ${shop?.name || 'TickeeFlow'}`,
       html: `
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
           <div style="background:#111118;padding:24px;border-radius:12px 12px 0 0;">
-            <h1 style="color:#F59E0B;margin:0;font-size:22px;">RepairFlow</h1>
+            <h1 style="color:#F59E0B;margin:0;font-size:22px;">TickeeFlow</h1>
             <p style="color:#9CA3AF;margin:4px 0 0;font-size:13px;">${shop?.name || ''}</p>
           </div>
           <div style="background:#ffffff;padding:24px;border:1px solid #E5E7EB;border-radius:0 0 12px 12px;">
@@ -71,7 +71,7 @@ export async function POST(req, { params }) {
                 : ''}
               <p style="margin:8px 0 0;color:#111118;font-size:16px;font-weight:bold;">Total net : ${parseFloat(invoice.total_net).toFixed(2)} €</p>
             </div>
-            <p style="color:#4B5563;font-size:13px;">Cordialement,<br><strong>${shop?.name || 'RepairFlow'}</strong></p>
+            <p style="color:#4B5563;font-size:13px;">Cordialement,<br><strong>${shop?.name || 'TickeeFlow'}</strong></p>
           </div>
         </div>
       `,
