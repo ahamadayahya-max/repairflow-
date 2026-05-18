@@ -9,7 +9,6 @@ import {
   Phone, MapPin, Clock, AlertCircle, Mail, Link2,
   ImagePlus, X, Printer, Leaf, Eye, EyeOff,
 } from 'lucide-react'
-import { ThemeSelector } from '@/components/ThemeToggle'
 
 const inputClass = `w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white
   placeholder-gray-600 focus:outline-none focus:border-amber-500/50 transition-colors`
@@ -596,17 +595,6 @@ export default function SettingsPage() {
             }
           </button>
         </div>
-      </div>
-
-      {/* ── Section Apparence ── */}
-      <div className="bg-[#111118] rounded-xl border border-white/10 p-6">
-        <h2 className="text-white font-semibold text-sm mb-1 flex items-center gap-2">
-          🎨 Apparence
-        </h2>
-        <p className="text-xs text-gray-500 mb-5">
-          Choisissez le thème de l'interface. La préférence est sauvegardée automatiquement.
-        </p>
-        <ThemeSelector />
       </div>
 
       {/* ── Section compte ── */}
