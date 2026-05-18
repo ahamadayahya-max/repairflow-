@@ -1,5 +1,5 @@
--- ============================================================
--- RepairFlow — Migration initiale
+﻿-- ============================================================
+-- TickeeFlow — Migration initiale
 -- PostgreSQL 15+ / Supabase
 -- Auteur : généré automatiquement
 -- ============================================================

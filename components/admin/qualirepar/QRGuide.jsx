@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState } from 'react'
 import { ChevronDown, ExternalLink } from 'lucide-react'
@@ -21,7 +21,7 @@ const STEPS = [
       { label: '📋 Tableau des produits éligibles', url: 'https://www.label-qualirepar.fr/les-produits-eligibles-au-fonds-reparation/', primary: true },
       { label: '💰 Montants de soutien par équipement', url: 'https://www.label-qualirepar.fr/wp-content/uploads/2022/07/soutiens-financiers-fonds-reparation.pdf', primary: false },
     ],
-    tip: '💡 Dans RepairFlow, la vérification d\'éligibilité est automatique dès que vous créez un ticket — sélectionnez la marque et le type d\'appareil dans le panneau "Bonus QualiRépar".',
+    tip: '💡 Dans TickeeFlow, la vérification d\'éligibilité est automatique dès que vous créez un ticket — sélectionnez la marque et le type d\'appareil dans le panneau "Bonus QualiRépar".',
   },
   {
     num: '2', icon: '🧾', color: 'amber',
@@ -41,7 +41,7 @@ const STEPS = [
         { desc: 'NET À PAYER',                   price: '95,00 €',  green: false, bold: true  },
       ],
     },
-    tip: '💡 RepairFlow génère automatiquement la facture PDF avec la mention "Bonus Réparation" et le bon montant déduit. Utilisez le bouton "Télécharger la facture PDF" sur la page du ticket.',
+    tip: '💡 TickeeFlow génère automatiquement la facture PDF avec la mention "Bonus Réparation" et le bon montant déduit. Utilisez le bouton "Télécharger la facture PDF" sur la page du ticket.',
   },
   {
     num: '3', icon: '📸', color: 'purple',
@@ -81,7 +81,7 @@ const STEPS = [
         color: 'blue',
       },
     ],
-    tip: '💡 RepairFlow détecte automatiquement l\'éco-organisme selon la marque et affiche le lien direct vers la bonne plateforme dans le panneau QualiRépar du ticket.',
+    tip: '💡 TickeeFlow détecte automatiquement l\'éco-organisme selon la marque et affiche le lien direct vers la bonne plateforme dans le panneau QualiRépar du ticket.',
   },
 ]
 
@@ -117,7 +117,7 @@ export default function QRGuide() {
           <p className="text-xs text-amber-400/80 leading-relaxed">
             En tant que réparateur labellisé, vous avancez le bonus à votre client en le déduisant
             de sa facture. Vous vous faites ensuite rembourser par l'éco-organisme sous 15 jours.
-            RepairFlow automatise tout le processus.
+            TickeeFlow automatise tout le processus.
           </p>
         </div>
       </div>
@@ -243,7 +243,7 @@ export default function QRGuide() {
                   </div>
                 )}
 
-                {/* Astuce RepairFlow */}
+                {/* Astuce TickeeFlow */}
                 <div className="flex items-start gap-2 bg-white/3 border border-white/8 rounded-lg p-3">
                   <span className="text-base flex-shrink-0">🔧</span>
                   <p className="text-xs text-gray-400 leading-relaxed">{step.tip}</p>

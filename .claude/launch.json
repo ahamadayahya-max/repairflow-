@@ -1,8 +1,8 @@
-{
+﻿{
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "repairflow",
+      "name": "tickeeflow",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--", "-p", "3002"],
       "port": 3002

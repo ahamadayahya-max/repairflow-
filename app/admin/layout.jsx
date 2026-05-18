@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
@@ -214,12 +214,13 @@ export default function AdminLayout({ children }) {
         lg:translate-x-0 lg:static lg:z-auto
       `}>
 
-        {/* Logo */}
-        <div className="flex items-center gap-2.5 px-5 py-5 border-b border-white/10">
-          <div className="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center">
-            <Wrench className="w-4 h-4 text-amber-400" />
+        {/* Logo texte TickeeFlow — temporaire en attendant le vrai logo PNG */}
+        <div className="px-5 py-4 border-b border-white/10">
+          <div className="text-xl font-bold tracking-tight leading-none">
+            <span className="text-amber-400">Tickee</span>
+            <span className="text-white">Flow</span>
           </div>
-          <span className="text-white font-bold text-base">RepairFlow</span>
+          <div className="text-[10px] text-gray-600 mt-1">I-Mobile Service · Toulouse</div>
         </div>
 
         {/* Navigation groupée */}
@@ -330,7 +331,7 @@ export default function AdminLayout({ children }) {
           {/* Logo mobile uniquement */}
           <div className="lg:hidden flex items-center gap-2 flex-shrink-0">
             <Wrench className="w-4 h-4 text-amber-400" />
-            <span className="text-white font-bold text-sm">RepairFlow</span>
+            <span className="text-white font-bold text-sm">TickeeFlow</span>
           </div>
 
           {/* Breadcrumb desktop */}

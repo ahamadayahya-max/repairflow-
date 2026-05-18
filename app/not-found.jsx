@@ -1,4 +1,4 @@
-import Link from 'next/link'
+﻿import Link from 'next/link'
 
 /**
  * Page 404 globale Next.js.
@@ -40,7 +40,7 @@ export default function NotFound() {
         href="/"
         className="mt-4 text-xs text-gray-600 hover:text-gray-400 transition-colors"
       >
-        Accueil RepairFlow →
+        Accueil TickeeFlow →
       </Link>
     </div>
   )

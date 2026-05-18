@@ -596,7 +596,7 @@ export default function TicketDetailPage() {
         import('react'),
         import('qrcode').then(m => m.default),
       ])
-      const trackingUrl = `https://repairflow-app.vercel.app/suivi/${ticket.tracking_token}`
+      const trackingUrl = `https://tickeeflow-app.vercel.app/suivi/${ticket.tracking_token}`
       const qrDataUrl   = await QRCode.toDataURL(trackingUrl, { width: 200, margin: 1 })
       const blob = await pdf(
         createElement(TicketReceiptPDF, { ticket, shop, qrCodeDataUrl: qrDataUrl })
@@ -627,7 +627,7 @@ export default function TicketDetailPage() {
         import('react'),
         import('qrcode').then(m => m.default),
       ])
-      const trackingUrl = `https://repairflow-app.vercel.app/suivi/${ticket.tracking_token}`
+      const trackingUrl = `https://tickeeflow-app.vercel.app/suivi/${ticket.tracking_token}`
       const qrDataUrl   = await QRCode.toDataURL(trackingUrl, { width: 200, margin: 1 })
       const blob = await pdf(
         createElement(TicketReceiptPDF, { ticket, shop, qrCodeDataUrl: qrDataUrl })
@@ -1311,7 +1311,7 @@ export default function TicketDetailPage() {
                 <div className="flex flex-col items-center gap-3 pt-2">
                   <div className="bg-white p-3 rounded-xl" id="qr-print-zone">
                     <QRCodeSVG
-                      value={`https://repairflow-app.vercel.app/suivi/${ticket.tracking_token}`}
+                      value={`https://tickeeflow-app.vercel.app/suivi/${ticket.tracking_token}`}
                       size={160}
                       level="M"
                       includeMargin={false}

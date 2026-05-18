@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
@@ -76,9 +76,9 @@ export default function NotificationBell({ shopId, onRead }) {
         filter: `shop_id=eq.${shopId}`,
       }, (payload) => {
         // Toast visuel simple (title tag)
-        document.title = `🔔 ${payload.new.title} — RepairFlow`
+        document.title = `🔔 ${payload.new.title} — TickeeFlow`
         setTimeout(() => {
-          document.title = 'RepairFlow'
+          document.title = 'TickeeFlow'
         }, 4000)
         loadNotifications()
       })

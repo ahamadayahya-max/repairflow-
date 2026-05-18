@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import FullCalendar from '@fullcalendar/react'
 import timeGridPlugin from '@fullcalendar/timegrid'
@@ -43,7 +43,7 @@ const DARK_CSS = `
 `
 
 /**
- * Enveloppe FullCalendar avec le thème sombre RepairFlow.
+ * Enveloppe FullCalendar avec le thème sombre TickeeFlow.
  * Importé dynamiquement (ssr:false) depuis la page Agenda.
  * @param {{
  *   events: object[],

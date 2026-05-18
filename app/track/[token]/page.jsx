@@ -33,7 +33,7 @@ async function fetchTicket(token) {
 export async function generateMetadata({ params }) {
   const { token } = await params
   const ticket    = await fetchTicket(token)
-  const shopName  = ticket?.shop?.name ?? 'RepairFlow'
+  const shopName  = ticket?.shop?.name ?? 'TickeeFlow'
 
   return {
     title:       `Suivi de réparation #${token} — ${shopName}`,
@@ -52,7 +52,7 @@ function NotFoundPage() {
 
       <div className="flex items-center gap-2 mb-8">
         <Wrench className="w-5 h-5 text-amber-500" />
-        <span className="text-gray-900 font-bold text-xl">RepairFlow</span>
+        <span className="text-gray-900 font-bold text-xl">TickeeFlow</span>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 px-8 py-10 max-w-sm w-full">

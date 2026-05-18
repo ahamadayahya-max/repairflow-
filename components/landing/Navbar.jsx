@@ -1,4 +1,4 @@
-// components/landing/Navbar.jsx
+﻿// components/landing/Navbar.jsx
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -22,11 +22,11 @@ export default function Navbar() {
 
     // Écoute de l'événement custom pour ouvrir la modale depuis n'importe quel composant
     const handleOpenDemo = () => setIsModalOpen(true)
-    window.addEventListener('repairflow:open-demo', handleOpenDemo)
+    window.addEventListener('tickeeflow:open-demo', handleOpenDemo)
 
     return () => {
       window.removeEventListener('scroll', handleScroll)
-      window.removeEventListener('repairflow:open-demo', handleOpenDemo)
+      window.removeEventListener('tickeeflow:open-demo', handleOpenDemo)
     }
   }, [])
 
@@ -51,7 +51,7 @@ export default function Navbar() {
             <a href="/" className="flex items-center gap-2 flex-shrink-0">
               <Wrench className="w-6 h-6 text-amber-500" />
               <span className="text-lg font-bold text-[#F1F0ED] tracking-tight">
-                RepairFlow
+                TickeeFlow
               </span>
             </a>
 

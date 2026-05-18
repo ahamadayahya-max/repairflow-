@@ -1,6 +1,7 @@
-{
-  "name": "repairflow",
+﻿{
+  "name": "tickeeflow",
   "version": "0.1.0",
+  "description": "TickeeFlow — SaaS gestion atelier réparation",
   "private": true,
   "scripts": {
     "dev": "next dev",

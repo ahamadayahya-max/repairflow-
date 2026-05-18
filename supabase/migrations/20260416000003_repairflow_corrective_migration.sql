@@ -1,5 +1,5 @@
--- =============================================================================
--- 20260416000003_repairflow_corrective_migration.sql
+﻿-- =============================================================================
+-- 20260416000003_tickeeflow_corrective_migration.sql
 -- Correction des incohérences entre les migrations initiales.
 -- Doit tourner APRÈS 20260416000001 (shops) — d'où le timestamp 20260416000003.
 -- =============================================================================

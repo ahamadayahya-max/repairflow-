@@ -1,6 +1,6 @@
--- =============================================================================
+﻿-- =============================================================================
 -- Migration : table shops + liaison tickets → shops
--- Chaque atelier inscrit sur RepairFlow a sa propre ligne dans cette table.
+-- Chaque atelier inscrit sur TickeeFlow a sa propre ligne dans cette table.
 -- Les tickets sont rattachés à un atelier via shop_id.
 -- La RPC get_ticket_by_token retourne les infos de l'atelier avec le ticket.
 -- =============================================================================

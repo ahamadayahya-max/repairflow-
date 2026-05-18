@@ -1,12 +1,12 @@
-{
-  "name": "RepairFlow — Dashboard Stats API",
+﻿{
+  "name": "TickeeFlow — Dashboard Stats API",
   "active": false,
   "settings": {
     "executionOrder": "v1",
     "saveManualExecutions": true,
     "callerPolicy": "workflowsFromSameOwner"
   },
-  "id": "repairflow-dashboard-stats-v1",
+  "id": "tickeeflow-dashboard-stats-v1",
   "meta": {
     "description": "Endpoint GET /dashboard/stats protégé par X-Api-Key. Agrège les KPIs Supabase, les derniers tickets et le CA mensuel. Répond avec Cache-Control: max-age=300."
   },
@@ -18,7 +18,7 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [0, 280],
-      "webhookId": "repairflow-dashboard-stats",
+      "webhookId": "tickeeflow-dashboard-stats",
       "parameters": {
         "httpMethod": "GET",
         "path": "dashboard/stats",

@@ -57,7 +57,7 @@ export async function POST(request, { params }) {
 
   const client   = ticket.clients
   const shop     = ticket.shops
-  const appUrl   = process.env.NEXT_PUBLIC_APP_URL ?? 'https://repairflow-app.vercel.app'
+  const appUrl   = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tickeeflow-app.vercel.app'
 
   // Pas de données client dans les logs — vérification silencieuse
   if (!client) return NextResponse.json({ error: 'Client introuvable' }, { status: 404 })
@@ -93,7 +93,7 @@ export async function POST(request, { params }) {
     }
 
     if (channel === 'sms') {
-      const result = await sendSms({ to: client.phone, content: customMsg.trim(), sender: shop?.name?.slice(0, 11) ?? 'RepairFlow' })
+      const result = await sendSms({ to: client.phone, content: customMsg.trim(), sender: shop?.name?.slice(0, 11) ?? 'TickeeFlow' })
       if (!result.success) return NextResponse.json({ error: result.error }, { status: 500 })
       return NextResponse.json({ success: true, channel: 'sms' })
     }
@@ -115,7 +115,7 @@ export async function POST(request, { params }) {
 
   if (channel === 'sms') {
     const smsContent = tmpl.sms(vars)
-    const result     = await sendSms({ to: client.phone, content: smsContent, sender: shop?.name?.slice(0, 11) ?? 'RepairFlow' })
+    const result     = await sendSms({ to: client.phone, content: smsContent, sender: shop?.name?.slice(0, 11) ?? 'TickeeFlow' })
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 500 })
     return NextResponse.json({ success: true, channel: 'sms' })
   }

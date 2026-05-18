@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server'
+﻿import { NextResponse } from 'next/server'
 
-const CORRECT_PASSWORD = 'RepairFlow2026!'
+const CORRECT_PASSWORD = 'TickeeFlow2026!'
 const COOKIE_NAME      = 'rf_access'
 const COOKIE_VALUE     = 'rf_unlocked_2026'
 

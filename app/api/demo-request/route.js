@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+﻿import { NextResponse } from 'next/server'
 import { sendEmail } from '@/lib/notifications/sendEmail'
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -11,7 +11,7 @@ const ADMIN_EMAIL   = process.env.ADMIN_NOTIFICATION_EMAIL ?? 'ahamada.yahya@gma
 /**
  * POST /api/demo-request
  * Enregistre une demande de démo dans Supabase et envoie un email de notification
- * à l'administrateur RepairFlow.
+ * à l'administrateur TickeeFlow.
  */
 export async function POST(request) {
   try {
@@ -65,7 +65,7 @@ export async function POST(request) {
       subject: `🔔 Nouvelle demande de démo — ${nom_atelier}`,
       html: `
         <div style="font-family:sans-serif;max-width:520px;margin:auto;">
-          <h2 style="color:#F59E0B;">Nouvelle demande de démo RepairFlow</h2>
+          <h2 style="color:#F59E0B;">Nouvelle demande de démo TickeeFlow</h2>
           <table style="width:100%;border-collapse:collapse;">
             <tr><td style="padding:8px 0;color:#6B7280;width:140px;">Prénom</td><td style="padding:8px 0;font-weight:600;">${prenom}</td></tr>
             <tr><td style="padding:8px 0;color:#6B7280;">Atelier</td><td style="padding:8px 0;font-weight:600;">${nom_atelier}</td></tr>
@@ -74,7 +74,7 @@ export async function POST(request) {
             ${message ? `<tr><td style="padding:8px 0;color:#6B7280;vertical-align:top;">Message</td><td style="padding:8px 0;">${message}</td></tr>` : ''}
           </table>
           <p style="margin-top:24px;color:#9CA3AF;font-size:13px;">
-            Demande reçue via repairflow-app.vercel.app — à rappeler sous 24h.
+            Demande reçue via tickeeflow-app.vercel.app — à rappeler sous 24h.
           </p>
         </div>
       `,
